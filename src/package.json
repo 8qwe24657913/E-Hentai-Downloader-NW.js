@@ -1,0 +1,34 @@
+{
+	"name": "EHDownloader-NW.js",
+	"description": "E-Hentai Downloader for NW.js",
+	"version": "0.1.0",
+	"keywords": ["E-Hentai", "E Hentai", "E-Hentai Downloader", "E Hentai Downloader", "EHDownloader", "EHD"],
+	"maintainers": [{
+		"name": "864907600cc"
+	}, {
+		"name": "8qwe24657913"
+	}],
+	"bugs": "https://github.com/8qwe24657913/E-Hentai-Downloader-NW.js/issues",
+	"dependencies": {
+		"co": "^4.6.0",
+		"po": "^4.5.2"
+	},
+	"licenses": "GPLv3",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/8qwe24657913/E-Hentai-Downloader.git"
+	},
+	"main": "index.html",
+	"js-flags": "--harmony",
+	"window": {
+		"title": "E-Hentai Downloader",
+		"icon": "icon.png",
+		"width": 700,
+		"height": 600,
+		"toolbar": false,
+		"resizable": false,
+		"fullscreen": false,
+		"show": false,
+		"frame": false
+	}
+}

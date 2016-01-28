@@ -1,0 +1,13 @@
+{
+	"cookie": "",
+	"thread-count": 5,
+	"timeout": 60,
+	"retry-count": 3,
+	"dir-name": "{gid}_{token}",
+	"number-images": true,
+	"number-separator": "：",
+	"force-resized": false,
+	"number-real-index": false,
+	"never-new-url": false,
+	"never-send-nl": false
+}

@@ -1,0 +1,62 @@
+body {
+	margin: 0 !important;
+	color: #5C0D11;
+	text-align: center;
+	background: #E3E0D1;
+	font-family: "Microsoft YaHei", Arial;
+}
+.ehD-box {
+	margin: 20px auto;
+	width: 600px;
+	box-sizing: border-box;
+	font-size: 12px;
+}
+.ehD-box a {
+	cursor: pointer;
+}
+.ehD-box .g2 {
+	display: inline-block;
+	margin: 10px;
+	padding: 0;
+	line-height: 14px;
+}
+.ehD-setting, .ehD-dialog {
+	padding: 5px;
+	border: 1px solid #000000;
+	background: #34353b;
+	color: #dddddd;
+	max-width: 100%;
+	max-height: 100%;
+	overflow: auto;
+	box-sizing: border-box;
+	margin: 0 auto;
+	text-align: left;
+	font-size: 12px;
+}
+.ehD-setting {
+	width: 600px;
+	height: 450px;
+}
+.ehD-dialog {
+	position: fixed;
+	right: 0px;
+	bottom: 0px;
+	width: 100%;
+	height: 100%;
+	max-width: 100%;
+	max-height: 100%;
+	z-index: 999;
+}
+.ehD-setting .g2 {
+	padding-bottom: 10px;
+}
+.ehD-setting input, .ehD-box input {
+	vertical-align: middle;
+}
+.g2 a {
+	font-weight: bold;
+	text-decoration: none;
+}
+.hide {
+	display: none;
+}
