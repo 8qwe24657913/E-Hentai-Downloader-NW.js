@@ -2,6 +2,8 @@
 
 Directly Download E-Hentai archive as folder with less memory usage than [The userscript version](https://github.com/ccloli/E-Hentai-Downloader)
 
+## [å¤©æœæ–°å¸æœºçœ‹è¿™é‡Œ](https://github.com/8qwe24657913/E-Hentai-Downloader-NW.js/wiki/%E5%A4%A9%E6%9C%9D%E6%96%B0%E5%8F%B8%E6%9C%BA%E7%9C%8B%E8%BF%99%E9%87%8C(For-Chinese-Main-Land-New-Users))(For Chinese Main Land New Users)
+
 
 ## Required Environment
 
@@ -46,20 +48,20 @@ EHD-NW.js will use your system HTTP proxy(PACs are also available), HTTPS/SOCKS 
 
 ## Should Be Noticed
 
-- You can have a look at [E-Hentai Image Viewing Limits](https://github.com/ccloli/E-Hentai-Downloader/wiki/E%E2%88%92Hentai-Image-Viewing-Limits)
+- You can have a look at [E-Hentai Image Viewing Limits](https://github.com/8qwe24657913/E-Hentai-Downloader-NW.js/wiki/E%E2%88%92Hentai-Image-Viewing-Limits)
 - Most of archive may have a torrent download. You can download archive with torrent to get stable download experience, get bonus content (most in cosplay gallery), earn GP and credit, and reduce the pressure of E-Hentai original servers (though it's a P2P site)
 
 
 ## Browser Developer Tools
 
-To record running progress, script will output some logs into console (Press F12 --> Console). If you find a bug, you can copy them and paste them here. But noticed, keep opening developer tools may increase memory usage and reduce running efficiency. So don't open console only if you want to see the output logs.
+To record running progress, script will output some logs into console (Right Click --> Devtools or Press F12 --> Console). If you find a bug, you can copy them and paste them here. But noticed, keep opening developer tools may increase memory usage and reduce running efficiency. So don't open console only if you want to see the output logs.
 
 
 ## Todos
 
 - Support resume
 - Support HTTPS/SOCKS proxies (HTTP proxy is already supported)
-- Make the code tidier (Õâ¸öÕæ²»ÊÇÎÒµÄ¹ø£¬ccµÄ´úÂë±ÈÕâ»¹ÂÒ¡­¡­)
+- Make the code tidier (è¿™ä¸ªçœŸä¸æ˜¯æˆ‘çš„é”…ï¼Œccçš„ä»£ç æ¯”è¿™è¿˜ä¹±â€¦â€¦)
 
 ## Report A Bug
 
