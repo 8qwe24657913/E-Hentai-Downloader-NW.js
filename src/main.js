@@ -205,8 +205,8 @@ var globals = {};
 
 var parseGlobals = co.wrap(function * (url) {
     function parse(txt, reg) {
-        var res = reg.exec(txt), i = 1;
-        for (var e of reg.arr) globals[e] = res[i++];
+		var res = reg.exec(txt), l = res.length;
+		while (--l > 0) globals[reg.arr[l - 1]] = res[l];
     }
     var reg1 = /var base_url \= "([^"]+)";\nvar gid = (\d+);\nvar token \= "([^"]+)";\nvar apiuid \= (\-?\d+);\nvar apikey \= "([^"]+)";\nvar original_rating \= (\d+(?:\.\d+)?);/g,
         reg2 = /\<h1 id\="gn"\>([^\<]*)\<\/h1\>\<h1 id\="gj"\>([^\<]+)\<\/h1\>.*alt="([^"]+)" class="ic".*\<div id\="gdn"\>\<a [^\<]+\>([^\<]+)\<\/a\>/g,
