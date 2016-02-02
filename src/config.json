@@ -7,7 +7,7 @@
 	"number-images": true,
 	"number-separator": "：",
 	"force-resized": false,
-	"number-real-index": false,
+	"number-real-index": true,
 	"never-new-url": false,
 	"never-send-nl": false
 }
