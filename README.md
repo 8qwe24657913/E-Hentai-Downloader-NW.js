@@ -59,7 +59,6 @@ To record running progress, script will output some logs into console (Right Cli
 
 ## Todos
 
-- Support resume
 - Support HTTPS/SOCKS proxies (HTTP proxy is already supported)
 - Make the code tidier (这个真不是我的锅，cc的代码比这还乱……)
 
