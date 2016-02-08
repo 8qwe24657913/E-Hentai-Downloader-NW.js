@@ -107,13 +107,13 @@ const ehD = {
 				if (!result) return fail();
 				retryCount = 0;
 				successed = true;
-				request = null;
 				try {
 					callback(result, send, fail)
 				} catch (e) {
 					ERRLOG(e);
 					fail();
 				}
+				request = null;
 			}, fail).catch(ERRLOG);
 		}
 		function fail() {
@@ -255,6 +255,14 @@ document.addEventListener('DOMContentLoaded', function () {
 	ehD.init().catch(ERRLOG)
 });
 
+var ehDownloadRegex = {
+	nl: /return nl\('([\d-]+)'\)/,
+	fileName: /g\/l.png" \/><\/a><\/div><div>([\s\S]+?) :: /,
+	resFileName: /filename=([\s\S]+?)\n/,
+	pagesRange: /^(\d+(-\d+)?\s*?,\s*?)*\d+(-\d+)?$/,
+	pagesURL: /(?:<a href=").+?(?=")/gi
+};
+
 var globals = {};
 //parseGlobals("http://r.e-hentai.org/g/900435/ebff9581b9/").then(function(e){console.log(e)},ERRLOG);
 
@@ -282,7 +290,19 @@ var parseGlobals = co.wrap(function * (url) {
         globals.origin = 'http://g.e-hentai.org';
         globals.isREH = true;
     } else globals.origin = url.match(/^[^\/]+\/\/[^\/]+/)[0];
-	globals._origin = globals.origin.split('.').join('\\.');
+	// regex
+	var _origin = globals.origin.split('.').join('\\.');
+	Object.assign(ehDownloadRegex, {
+		imageURL: [
+			RegExp('<a href="(' + _origin + '\/fullimg\\.php\\?\\S+?)"'),
+			/<img id="img" src="(\S+?)"/,
+			/<\/iframe><a[\s\S]+?><img src="(\S+?)"/
+		],
+		nextFetchURL: [
+			RegExp('<a id="next"[\\s\\S]+?href="(' + _origin + '\\/s\\/\\S+?)"'),
+			RegExp('<a href="(' + _origin + '\\/s\\/\\S+?)"><img src="http://ehgt.org/g/n.png"')
+		]
+	});
 	// js variables
     parse(txt, reg1, globals);
     for (e of ['gid', 'apiuid', 'original_rating']) globals[e] -= 0;
@@ -379,93 +399,116 @@ function PageData(pageURL, imageURL, imageName, nextNL, realIndex) {
 	this.imageNumber = '';
 }
 
-function failedFetching(index, node) {
-	var image = imageList[index];
-	fetchThread[index].abort();
-	console.error('[EHD] Index >', (index + 1), ' | RealIndex >', image.realIndex, ' | Name >', image.imageName, ' | RetryCount >', retryCount[index], ' | DownloadedCount >', downloadedCount, ' | FetchCount >', fetchCount, ' | FailedCount >', failedCount);
-	if (retryCount[index] < ehD.conf['retry-count']) {
-		retryCount[index]++;
-		fetchOriginalImage(index, node);
-	} else {
-		node.innerHTML = '<td style="word-break: break-all;">#' + image.realIndex + ': ' + image.imageName + '</td><td width="210" style="position: relative;"><progress style="width: 200px;" value="0"></progress><span style="position: absolute; width: 100%; text-align: center; color: #34353b; left: 0; right: 0;"></span></td><td style="color: #ff0000;">Failed!</td>';
-		failedCount++;
-		fetchCount--;
-		return fetchImg.needRetryAll() || fetchImg.isFinished();
+class Status {
+	constructor(image) {
+		var node = this.self = document.createElement('tr');
+		node.innerHTML = `
+			<td class="ehD-pt-name">#${image.realIndex}: ${image.imageName}</td>
+			<td class="ehD-pt-progress-outer">
+				<progress class="ehD-pt-progress"></progress>
+				<span class="ehD-pt-progress-text"></span>
+			</td>
+			<td class="ehD-pt-status">Pending...</td>`;
+		Object.assign(this, {
+			fileName: node.getElementsByTagName('td')[0],
+			status: node.getElementsByTagName('td')[2],
+			progress: node.getElementsByTagName('progress')[0],
+			progressText: node.getElementsByTagName('span')[0]
+		});
+		progressTable.appendChild(node);
+	}
+	set(data) {
+		if (!data) return this;
+		if ('class' in data) this.self.className = 'ehD-pt-item ' + data.class.trim();
+		if ('progress' in data) this.progress.setAttribute('value', data.progress);
+		for (var name of ['status', 'progressText', 'fileName']) if (name in data) this[name].textContent = data[name];
+		return this;
 	}
 }
 
-function fetchOriginalImage(index, node, url) {
-	var image = imageList[index];
-	if (!retryCount[index]) retryCount[index] = 0;
-	if (!url) ehD.DOM.dialog.scrollTop = ehD.DOM.dialog.scrollHeight;
-	var options = ehD.getReqOpt(image.imageURL);
-	options.headers.referer = options.headers['x-alt-referer'] = image.pageURL;
-	options.method = 'GET';
-	var speedInfo = {
-		lastTimestamp: 0,
-		lastProgress: 0,
-		loaded: 0,
-		total: 0
-	};
-	var req = http.request(options, function (res) {
-		if (res.statusCode !== 200) {
-			req.abort();
-			switch (res.statusCode) {
-			case 301:
-				image.imageURL = res.headers.location;
-			case 302:
-				fetchOriginalImage(index, node, res.headers.location);
-				break;
-			case 403:
-				fetchImg.fail('403 Access Denied', 'Error 403', 1, index, node, res);
-				break;
-			case 500:
-				fetchImg.fail('500 Internal Server Error.(See: <a href="https://github.com/ccloli/E-Hentai-Downloader/issues/16">here</a> )', 'Error 500', 0, index, node, res);
-				break;
-			default:
-				fetchImg.fail('Wrong Response Status (See: <a href="https://github.com/ccloli/E-Hentai-Downloader/issues/16">here</a> )', 'Wrong Status', 0, index, node, res);
-			}
-			return;
-		}
-		if (!res.headers['content-type'] || res.headers['content-type'].split('/')[0].trim() !== 'image') {
-			req.abort();
-			return fetchImg.fail('Wrong Content-Type', 'Wrong MIME', 0, index, node, res);
-		}
-		var matches = res.rawHeaders.join('\n').match(/filename=([\s\S]+?)\n/);
-		if (matches) image.imageName = getPurifyName(matches[1]);
-		var path = dirName + getUniqueFileName(image);
-		speedInfo.total = res.headers['content-length'];
-		fetchImg.listenAndPipe(res, fs.createWriteStream(path, 'binary'), speedInfo.total ? function (chunk) {
-			var t = new Date().getTime();
-			speedInfo.loaded += chunk.length;
-			if (!speedInfo.lastTimestamp) {
-				speedInfo.lastTimestamp = t;
-			} else if (t - speedInfo.lastTimestamp >= 1000) {
-				node.progressText.innerHTML = Number(speedInfo.lastProgress / (t - speedInfo.lastTimestamp) / 1.024).toFixed(2) + ' KB/s';
-				speedInfo.lastTimestamp = t;
-				speedInfo.lastProgress = speedInfo.loaded;
-			}
-			node.progress.setAttribute('value', speedInfo.loaded / speedInfo.total);
-		} : function (chunk) {
-			speedInfo.loaded += chunk.length;
-		});
-		res.on('end', function () {
-			fetchImg.onload(res, path, index, node, speedInfo);
-		});
-		node.status.innerHTML = retryCount[index] === 0 ? 'Downloading...' : 'Retrying (' + retryCount[index] + '/' + ehD.conf['retry-count'] + ') ...';
-		node.status.style.cssText = '';
-	});
-	if (0 !== ehD.conf['timeout']) req.setTimeout(ehD.conf['timeout'] * 1000, function () {
-		req.abort();
-		return fetchImg.ontimeout(index, node);
-	});
-	req.on('error', function (e) {
-		return fetchImg.onerror(e, index, node);
-	});
-	req.end();
-	fetchThread[index] = req;
-}
 var fetchImg = {
+	run(index, status, url) {
+		var image = imageList[index];
+		if (!retryCount[index]) retryCount[index] = 0;
+		if (!status) status = new Status(imageList[index]);
+		if (!url) url = image.imageURL;
+		var options = ehD.getReqOpt(url);
+		options.headers.referer = options.headers['x-alt-referer'] = image.pageURL;
+		options.method = 'GET';
+		var speedInfo = {
+			lastTimestamp: new Date().getTime(),
+			lastProgress: 0,
+			loaded: 0,
+			total: 0
+		};
+		var req = http.request(options, function (res) {
+			function fail(a, b, c) {
+				fetchImg.fail(a, b, c, index, status, res);
+			}
+			if (res.statusCode !== 200) {
+				req.abort();
+				switch (res.statusCode) {
+				case 301:
+					image.imageURL = res.headers.location;
+				case 302:
+					fetchImg.run(index, status, res.headers.location);
+					break;
+				case 403:
+					fail('403 Access Denied', 'Error 403', 1);
+					break;
+				case 500:
+					fail('500 Internal Server Error.(See: <a href="https://github.com/ccloli/E-Hentai-Downloader/issues/16">here</a> )', 'Error 500', 0);
+					break;
+				case 509:
+					fetchImg.reachedLimits(true, index, status, res);
+				default:
+					fail('Wrong Response Status (See: <a href="https://github.com/ccloli/E-Hentai-Downloader/issues/16">here</a> )', 'Wrong Status', 0);
+				}
+				return;
+			}
+			if (!res.headers['content-type'] || res.headers['content-type'].split('/')[0].trim() !== 'image') {
+				req.abort();
+				return fail('Wrong Content-Type', 'Wrong MIME', 0);
+			}
+			fail = null;
+			var matches = res.rawHeaders.join('\n').match(ehDownloadRegex.resFileName);
+			if (matches) image.imageName = getPurifyName(matches[1]);
+			var path = dirName + getUniqueFileName(image);
+			speedInfo.total = res.headers['content-length'];
+			fetchImg.listenAndPipe(res, fs.createWriteStream(path, 'binary'), speedInfo.total ? function (chunk) {
+				speedInfo.loaded += chunk.length;
+				var t = new Date().getTime(),
+					minus = t - speedInfo.lastTimestamp,
+					changes = {
+						progress: speedInfo.loaded / speedInfo.total
+					};
+				if (minus >= 1000) {
+					changes.progressText = Number(speedInfo.lastProgress / minus / 1.024).toFixed(2) + ' KB/s';
+					speedInfo.lastTimestamp = t;
+					speedInfo.lastProgress = speedInfo.loaded;
+				}
+				status.set(changes);
+			} : function (chunk) {
+				speedInfo.loaded += chunk.length;
+			});
+			res.on('end', function () {
+				fetchImg.onload(res, path, index, status, speedInfo);
+			});
+			status.set({
+				status: retryCount[index] === 0 ? 'Downloading...' : 'Retrying (' + retryCount[index] + '/' + ehD.conf['retry-count'] + ') ...',
+				class: ''
+			});
+		});
+		if (0 !== ehD.conf['timeout']) req.setTimeout(ehD.conf['timeout'] * 1000, function () {
+			req.abort();
+			return fetchImg.ontimeout(index, status);
+		});
+		req.on('error', function (e) {
+			return fetchImg.onerror(e, index, status);
+		});
+		req.end();
+		fetchThread[index] = req;
+	},
 	listenAndPipe(from, to, listener) {
 		var transform = new stream.Transform();
 		transform._transform = function (data, encoding, callback) {
@@ -474,18 +517,36 @@ var fetchImg = {
 		}
 		return from.pipe(transform).pipe(to);
 	},
-	fail(str1, str2, retryType, index, node, res, path) { //retryType 0: retry, 1: stop, 2: stopAll
+	fail(str1, str2, retryType, index, status, res, path) { //retryType 0: retry, 1: stop, 2: stopAll
 		if (!isDownloadingImg) return;
 		console.log('[EHD] #' + (index + 1) + ': ' + str1);
 		res && console.log('[EHD] #' + (index + 1) + ': RealIndex >', imageList[index].realIndex, ' | Status >', res.statusCode, ' | StatusText >', res.statusMessage + '\nResposeHeaders >' + res.headers);
-		node.progress.setAttribute('value', '0');
-		node.progressText.innerHTML = '';
-		node.status.innerHTML = 'Failed! (' + str2 + ')';
-		node.status.style.color = '#ffff00';
-		if (!retryType) return path ? ehD.unlink(path).then(failedFetching.bind(undefined, index, node)).catch(ERRLOG) : failedFetching(index, node);
+		status.set({
+			progress: 0,
+			progressText: '',
+			status: 'Failed! (' + str2 + ')',
+			class: retryType ? 'ehD-pt-failed' : 'ehD-pt-warning'
+		});
+		if (!retryType) return path ? ehD.unlink(path).then(this.retry.bind(this, index, status)).catch(ERRLOG) : this.retry(index, status);
 		else if (2 === retryType) return this.abortAll();
 		fetchCount--;
 		retryCount[index] = 1/0;
+	},
+	retry(index, status) {
+		var image = imageList[index];
+		fetchThread[index].abort();
+		console.error('[EHD] Index >', (index + 1), ' | RealIndex >', image.realIndex, ' | Name >', image.imageName, ' | RetryCount >', retryCount[index], ' | DownloadedCount >', downloadedCount, ' | FetchCount >', fetchCount, ' | FailedCount >', failedCount);
+		if (retryCount[index] < ehD.conf['retry-count']) { //retry
+			retryCount[index]++;
+			this.run(index, status);
+		} else { //fail
+			status.set({
+				class: 'ehD-pt-failed'
+			});
+			failedCount++;
+			fetchCount--;
+			return this.needRetryAll() || this.isFinished();
+		}
 	},
 	addContinueButton() {
 		var continueButton = document.createElement('button');
@@ -511,7 +572,7 @@ var fetchImg = {
 	},
 	addThreads() {
 		isDownloadingImg = true;
-		for (var node, i = fetchCount, j = 0; i < (ehD.conf['thread-count'] || 1); i++) {
+		for (var status, i = fetchCount, j = 0; i < (ehD.conf['thread-count'] || 1); i++) {
 			for (; j < imageList.length; j++) {
 				if (imageData[j]) continue;
 				if (retryCount[j] === ehD.conf['retry-count']) {
@@ -520,17 +581,9 @@ var fetchImg = {
 					continue;
 				}
 				imageData[j] = 'Fetching';
-				node = document.createElement('tr');
-				node.innerHTML = '<td style="word-break: break-all;">#' + imageList[j].realIndex + ': ' + imageList[j].imageName + '</td><td width="210" style="position: relative;"><progress style="width: 200px;"></progress><span style="position: absolute; width: 100%; text-align: center; color: #34353b; left: 0; right: 0;"></span></td><td>Pending...</td>';
-				progressTable.appendChild(node);
-				node = {
-					fileName: node.getElementsByTagName('td')[0],
-					status: node.getElementsByTagName('td')[2],
-					progress: node.getElementsByTagName('progress')[0],
-					progressText: node.getElementsByTagName('span')[0]
-				}
-				fetchOriginalImage(j, node);
+				ehD.DOM.dialog.scrollTop = ehD.DOM.dialog.scrollHeight;
 				fetchCount++;
+				fetchImg.run(j);
 				break;
 			}
 		}
@@ -555,10 +608,25 @@ var fetchImg = {
 		for (var thread of fetchThread) thread.abort();
 		fetchCount = 0;
 	},
-	onload(res, path, index, node, speedInfo) {
+	reachedLimits(isTemp, index, status, res, path) {
+		var str = 'You have ' + (isTemp ? 'temporarily ' : '') + 'reached your image viewing limits.';
+		fail(isTemp ? '509 Bandwidth Exceeded' : 'Exceed Image Viewing Limits', isTemp ? 'Error 509' : 'Exceed Limits', 2, index, status, res, path);
+		if (-1 === globals.apiuid || !confirm(str + ' ' + (isTemp ? 'You can Run the Hentai@Home to support E-Hentai and get more points to increase your limit. Check back in a few hours, and you will be able to download more.' : 'You can reset these limits at home page.') + '\n\nYou can try reseting your image viewing limits to continue by paying your GPs. Reset now?')) {
+			this.suspend();
+			pushDialog(str);
+		} else {
+			pushDialog('Please reset your viewing limits at http://g.e-hentai.org/home.php in your browser.\nAfter reseting your viewing limits, click the button below to continue.\n');
+			return addContinueButton();
+		}
+		return isDownloading = isDownloadingImg = false;
+	},
+	onload(res, path, index, status, speedInfo) {
 		if (!isDownloadingImg) return;
 		function fail(a, b, c) {
-			return fetchImg.fail(a, b, c, index, node, res, path)
+			return fetchImg.fail(a, b, c, index, status, res, path)
+		};
+		function reachedLimits(a) {
+			return fetchImg.reachedLimits(a, index, status, res, path)
 		};
 		switch (speedInfo.loaded) {
 		case 0: // Empty
@@ -568,32 +636,17 @@ var fetchImg = {
 		case 28:  // 'An error has occurred. (403)' Length
 			return fail('An error has occurred. (403)', 'Error 403');
 		case 141: // Image Viewing Limits String Byte Size
-			fail('Exceed Image Viewing Limits', 'Exceed Limits', 2);
-			pushDialog('\nYou have exceeded your image viewing limits.');
-			if (-1 === globals.apiuid || !confirm('You have exceeded your image viewing limits. You can reset these limits at home page.\n\nYou can try reseting your image viewing limits to continue by paying your GPs. Reset now?')) {
-				this.suspend();
-				pushDialog('You have exceeded your image viewing limits.');
-			} else {
-				pushDialog('Please reset your viewing limits at http://g.e-hentai.org/home.php in your browser.\nAfter reseting your viewing limits, click the button below to continue.\n');
-				return addContinueButton();
-			}
-			return isDownloading = isDownloadingImg = false;
+			return reachedLimits(false);
 		case 28658:  // '509 Bandwidth Exceeded' Image Byte Size
-			fail('509 Bandwidth Exceeded', 'Error 509', 2);
-			if (-1 === globals.apiuid || !confirm('You have temporarily reached the limit for how many images you can browse. You can Run the Hentai@Home to support E-Hentai and get more points to increase your limit.\n- Check back in a few hours, and you will be able to download more.\n\nYou can try reseting your image viewing limits to continue by paying your GPs. Reset now?')) {
-				this.suspend();
-				pushDialog('You have temporarily reached your image viewing limits.');
-			} else {
-				pushDialog('Please reset your viewing limits at http://g.e-hentai.org/home.php in your browser.\nAfter reseting your viewing limits, click the button below to continue.\n');
-				return addContinueButton();
-			}
-			return isDownloading = isDownloadingImg = false;
+			return reachedLimits(true);
 		}
-		node.fileName.innerHTML = '#' + imageList[index].realIndex + ': ' + imageList[index].imageName;
-		node.progress.setAttribute('value', '1');
-		node.progressText.innerHTML = '100%';
-		node.status.innerHTML = 'Succeed!';
-		node.status.style.color = '#00ff00';
+		status.set({
+			fileName: '#' + imageList[index].realIndex + ': ' + imageList[index].imageName,
+			progress: 1,
+			progressText: '100%',
+			status: 'Succeed!',
+			class: 'ehD-pt-succeed'
+		});
 		imageData[index] = 'Fetched';
 		downloadedCount++;
 		console.log('[EHD] Index >', index, ' | RealIndex >', imageList[index].realIndex, ' | Name >', imageList[index].imageName, ' | RetryCount >', retryCount[index], ' | DownloadedCount >', downloadedCount, ' | FetchCount >', fetchCount, ' | FailedCount >', failedCount);
@@ -602,11 +655,11 @@ var fetchImg = {
 		if (failedCount > 0) return this.needRetryAll(); // all files are called to download and some files can't be downloaded
 		else return this.writeInfo(); // all files are downloaded successfully
 	},
-	onerror(e, index, node) {
-		return this.fail('Network Error', e, 0, index, node);
+	onerror(e, index, status) {
+		return this.fail('Network Error', e, 0, index, status);
 	},
-	ontimeout(index, node) {
-		return this.fail('Timed Out', 'Timed Out', 0, index, node);
+	ontimeout(index, status) {
+		return this.fail('Timed Out', 'Timed Out', 0, index, status);
 	},
 	isFinished() {
 		if (downloadedCount + failedCount < imageList.length) this.addThreads() // download not finished, some files are not being called to download
@@ -658,9 +711,9 @@ function retryAllFailed() {
 			return fetchURL;
 		}, function (result, send, fail) {
 			var image = imageList[index];
-			var imageURL = (globals.apiuid !== -1 && result.indexOf('fullimg.php') >= 0 && !ehD.conf['force-resized']) ? result.match(RegExp('<a href="(' + globals._origin + '\/fullimg\\.php\\?\\S+?)"'))[1].replaceHTMLEntites() : result.indexOf('id="img"') > -1 ? result.match(/<img id="img" src="(\S+?)"/)[1].replaceHTMLEntites() : result.match(/<\/iframe><a[\s\S]+?><img src="(\S+?)"/)[1].replaceHTMLEntites(); // Sometimes preview image may not have id="img"
+			var imageURL = (globals.apiuid !== -1 && result.indexOf('fullimg.php') >= 0 && !ehD.conf['force-resized']) ? result.match(ehDownloadRegex.imageURL[0])[1].replaceHTMLEntites() : result.indexOf('id="img"') > -1 ? result.match(ehDownloadRegex.imageURL[1])[1].replaceHTMLEntites() : result.match(ehDownloadRegex.imageURL[2])[1].replaceHTMLEntites(); // Sometimes preview image may not have id="img"
 			image.imageURL = imageURL;
-			var nextNL = /return nl\('[\d-]+'\)/.test(result) ? result.match(/return nl\('([\d-]+)'\)/)[1] : null;
+			var nextNL = ehDownloadRegex.nl.test(result) ? result.match(ehDownloadRegex.nl)[1] : null;
 			image.nextNL = nextNL;
 			failedCount--;
 			pushDialog('Succeed!\nImage ' + (index + 1) + ': ' + imageURL + '\n');
@@ -690,7 +743,7 @@ function getAllPagesURL() {
 	pagesRange = [];
 	var pagesRangeText = ehD.DOM.range.value.replace(/，/g, ',').trim();
 	console.log('[EHD] Pages Range >', pagesRangeText);
-	if (!/^(\d+(-\d+)?\s*?,\s*?)*\d+(-\d+)?$/.test(pagesRangeText)) {
+	if (!ehDownloadRegex.pagesRange.test(pagesRangeText)) {
 		ehD.DOM.dialog.classList.add('hide');
 		return alert('Pages Range is not correct.');
 	}
@@ -720,7 +773,7 @@ function getAllPagesURL() {
 		ehD.getPage(function () {
 			return prefix + '?p=' + curPage
 		}, function (result, send, fail) {
-			var pagesURL = result.split('<div id="gdt">')[1].split('<div class="c">')[0].match(/(?:<a href=").+?(?=")/gi);
+			var pagesURL = result.split('<div id="gdt">')[1].split('<div class="c">')[0].match(ehDownloadRegex.pagesURL);
 			for (var i = 0; i < pagesURL.length; i++) {
 				pageURLsList.push(pagesURL[i].split('"')[1].replaceHTMLEntites().replaceOrigin());
 			}
@@ -789,11 +842,11 @@ var ehDownload = co.wrap(function * () {
 			else var nextFetchURL = pageURLsList[pagesRange[Math.min(rangeIndex, pagesRange.length - 1)] - 1];
 		} else {
 			pageURLsList.push(fetchURL);
-			var nextFetchURL = result.indexOf('<a id="next"') >= 0 ? result.match(RegExp('<a id="next"[\\s\\S]+?href="(' + globals._origin + '\\/s\\/\\S+?)"'))[1].replaceHTMLEntites().replaceOrigin() : result.match(RegExp('<a href="(' + globals._origin + '\\/s\\/\\S+?)"><img src="http://ehgt.org/g/n.png"'))[1].replaceHTMLEntites().replaceOrigin();
+			var nextFetchURL = result.indexOf('<a id="next"') >= 0 ? result.match(ehDownloadRegex.nextFetchURL[0])[1].replaceHTMLEntites().replaceOrigin() : result.match(ehDownloadRegex.nextFetchURL[1])[1].replaceHTMLEntites().replaceOrigin();
 		}
-		var imageURL = (globals.apiuid !== -1 && result.indexOf('fullimg.php') >= 0 && !ehD.conf['force-resized']) ? result.match(RegExp('<a href="(' + globals._origin + '\/fullimg\\.php\\?\\S+?)"'))[1].replaceHTMLEntites().replaceOrigin() : result.indexOf('id="img"') > -1 ? result.match(/<img id="img" src="(\S+?)"/)[1].replaceHTMLEntites() : result.match(/<\/iframe><a[\s\S]+?><img src="(\S+?)"/)[1].replaceHTMLEntites(); // Sometimes preview image may not have id="img"
-		var fileName = result.match(/g\/l.png" \/><\/a><\/div><div>([\s\S]+?) :: /)[1].replaceHTMLEntites();
-		var nextNL = /return nl\('[\d-]+'\)/.test(result) ? result.match(/return nl\('([\d-]+)'\)/)[1] : null;
+		var imageURL = (globals.apiuid !== -1 && result.indexOf('fullimg.php') >= 0 && !ehD.conf['force-resized']) ? result.match(ehDownloadRegex.imageURL[0])[1].replaceHTMLEntites().replaceOrigin() : result.indexOf('id="img"') > -1 ? result.match(ehDownloadRegex.imageURL[1])[1].replaceHTMLEntites() : result.match(ehDownloadRegex.imageURL[2])[1].replaceHTMLEntites(); // Sometimes preview image may not have id="img"
+		var fileName = result.match(ehDownloadRegex.fileName)[1].replaceHTMLEntites();
+		var nextNL = ehDownloadRegex.nl.test(result) ? result.match(ehDownloadRegex.nl)[1] : null;
 		imageList.push(new PageData(fetchURL, imageURL, fileName, nextNL, realIndex));
 		index++;
 		pushDialog('Succeed!\nImage ' + realIndex + ': ' + imageURL + '\n');

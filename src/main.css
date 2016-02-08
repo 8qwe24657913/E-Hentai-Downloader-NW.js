@@ -3,7 +3,7 @@ body {
 	color: #5C0D11;
 	text-align: center;
 	background: #E3E0D1;
-	font-family: "Microsoft YaHei", Arial;
+	font-family:"Microsoft YaHei", Arial;
 }
 .ehD-box {
 	margin: 20px auto;
@@ -52,6 +52,36 @@ body {
 }
 .ehD-setting input, .ehD-box input {
 	vertical-align: middle;
+}
+.ehD-pt-name {
+	word-break: break-all;
+}
+.ehD-pt-progress-outer {
+	width: 160px;
+	position: relative;
+}
+.ehD-pt-progress {
+	width: 150px;
+}
+.ehD-pt-progress-text {
+	position: absolute;
+	width: 100%;
+	text-align: center;
+	color: #34353b;
+	left: 0;
+	right: 0;
+}
+.ehD-pt-status {
+	width: 130px;
+}
+.ehD-pt-succeed .ehD-pt-status {
+	color: #00ff00;
+}
+.ehD-pt-warning .ehD-pt-status {
+	color: #ffff00;
+}
+.ehD-pt-failed .ehD-pt-status {
+	color: #ff0000;
 }
 .g2 a {
 	font-weight: bold;
