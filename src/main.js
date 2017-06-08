@@ -272,6 +272,7 @@ var parseGlobals = co.wrap(function * (url) {
 	url = url.split('?', 1)[0];
 	if (globals.url === url) return globals;
     function parse(txt, reg) {
+    	if (reg.lastIndex) reg.lastIndex = 0;
 		var res = reg.exec(txt), l = res.length;
 		while (--l > 0) globals[reg.arr[l - 1]] = res[l];
     }
