@@ -1,7 +1,5 @@
 'use strict';
-var co = require('co'),
-	po = require('po'),
-	fs = require('fs'),
+var fs = require('fs'),
 	http = require('http'),
 	url = require('url'),
 	stream = require('stream'),
@@ -14,10 +12,10 @@ window.addEventListener('dragover', function (e) {
 window.addEventListener('drop', function (e) {
 	e.stopPropagation();
     e.preventDefault();
-	for (var files = e.dataTransfer.files, i = 0, l = files.length; i < l; i++) if ('resume.txt' === files[i].name) {
+    for (var file of e.dataTransfer.files) if ('resume.txt' === file.name) {
 		ehD.DOM.dialog.innerHTML = '';
 		ehD.DOM.dialog.classList.remove('hide');
-		return ehD.resume(files[i].path).catch(ERRLOG)
+		return ehD.resume(file.path).catch(ERRLOG)
 	};
 });
 
@@ -28,7 +26,7 @@ function ERRLOG(err) {
 function FATALERR(err) {
 	if (err instanceof Error) err = err.stack;
 	console.error(err);
-	pushDialog('Fatal error:\n' + err + '\nPlease right-click and choose devtools to get detailed information.');
+	pushDialog(`Fatal error:\n${err}\nPlease right-click and choose devtools to get detailed information.`);
 	throw err;
 }
 const ehD = {
@@ -53,11 +51,6 @@ const ehD = {
 		range: 'ehD-range',
 		dialog: 'ehD-dialog'
 	},
-	mkdir: po(fs.mkdir, fs),
-	read: po(fs.readFile, fs),
-	stat: po(fs.stat, fs),
-	unlink: po(fs.unlink, fs),
-	write: po(fs.writeFile, fs),
 	getReqOpt(href) {
 		var proxy = gui.App.getProxyForURL(href).match(/^PROXY\s+([^:]+):(\d+)/),
 			parsed = url.parse(href),
@@ -90,7 +83,7 @@ const ehD = {
 		req.end();
 		return req;
 	}),
-	getPage: function (getUrl, callback, onfail) {
+	getPage(getUrl, callback, onfail) {
 		var url, request, retryCount = 0, successed = true,
 			code = {
 				req: function (req) {
@@ -151,13 +144,13 @@ const ehD = {
 			}
 		};
 		conf['number-images'] = this.DOM.numberInput.checked;
-		conf['number-separator'] = getPurifyName(conf['number-separator']);
-		return this.write('config.json', JSON.stringify(this.conf = Object.assign({}, this.defConf, conf), null, '\t'), 'utf8').catch(ERRLOG);
+		conf['number-separator'] = getPurifiedName(conf['number-separator']);
+		return this.writeFile('config.json', JSON.stringify(this.conf = Object.assign({}, this.defConf, conf), null, '\t'), 'utf8').catch(ERRLOG);
 	},
 	setData(conf) {
 		var def = this.defConf;
 		conf = this.conf = Object.assign({}, def, conf);
-		conf['number-separator'] = getPurifyName(conf['number-separator'] + '');
+		conf['number-separator'] = getPurifiedName(conf['number-separator'] + '');
 		for (var i in def) {
 			try {
 				if (def[i].constructor !== conf[i].constructor) conf[i] = def[i].constructor(conf[i]);
@@ -182,21 +175,21 @@ const ehD = {
 		document.addEventListener('keyup', function (e) {
 			if (27 === e.keyCode) return this.win.close();
 		});
-		document.getElementsByClassName('ehD-start')[0].addEventListener('click', co.wrap(function *(event) {
+		document.getElementsByClassName('ehD-start')[0].addEventListener('click', async function (event) {
 			event.preventDefault();
 			if (isDownloading && !confirm('E-Hentai Downloader is working now, are you sure to stop downloading and start a new download?')) return;
 			isResume = false;
 			ehD.DOM.dialog.innerHTML = '';
 			ehD.DOM.dialog.classList.remove('hide');
-			yield parseGlobals(ehD.DOM.url.value).catch(FATALERR);
+			await parseGlobals(ehD.DOM.url.value).catch(FATALERR);
 			if (globals.apiuid === -1 && !confirm('You are not log in to E-Hentai Forums, so you can\'t download original image. Continue?')) return ehD.DOM.dialog.classList.add('hide');
 			dirName = getReplacedName(ehD.conf['dir-name'] || '{gid}_{token}') + '/';
-			if (true === (yield ehD.checkDir())) return;
+			if (true === (await ehD.checkDir())) return;
 			if (ehD.DOM.range.value.trim() === '') {
 				if (pagesRange.length) pagesRange = [];
 				ehDownload();
 			} else getAllPagesURL();
-		}));
+		});
 		this.win.on('close', function () {
 			var close = this.close.bind(this, true);
 			if (/*isDownloading*/isDownloadingImg && confirm('E-Hentai Downloader is still running. Do you still want to suspend downloading?')) {
@@ -205,52 +198,55 @@ const ehD = {
 			} else return close();
 		});
 	},
-	*checkDir () {
+	async checkDir() {
 		try {
-			var stat = yield this.stat(dirName);
+			var stat = await this.stat(dirName);
 		} catch (e) {
 			if (-4058 !== e.errno) return FATALERR(e);
-			return yield this.mkdir(dirName).catch(FATALERR);
+			return await this.mkdir(dirName).catch(FATALERR);
 		}
 		if (!stat.isDirectory()) {
 			if (confirm('There is a file whose name is duplicated with dirName. Do you want to unlink it?')) {
-				yield this.unlink(dirName);
-				yield this.mkdir(dirName);
+				await this.unlink(dirName);
+				await this.mkdir(dirName);
 			} else return FATALERR('Same-name file didn\'t removed!');
 		} else {
-			var resumeStat = yield this.stat(dirName + 'resume.txt').catch(function(){});
+			var resumeStat = await this.stat(dirName + 'resume.txt').catch(function(){});
 			if (resumeStat && !resumeStat.isDirectory()) return (this.resume(dirName + 'resume.txt').catch(FATALERR), true);
 		}
 	},
 	writeDefConf(e) {
 		console.warn('config.json is missing or broken, error message:', e, 'trying applying default config.');
-		this.write('config.json', JSON.stringify(this.defConf, null, '\t'), 'utf8').catch(ERRLOG);
+		this.writeFile('config.json', JSON.stringify(this.defConf, null, '\t'), 'utf8').catch(ERRLOG);
 		return null;
 	},
-	resume: co.wrap(function * (path) {
-		var txt = yield this.read(path, 'utf8'),
+	async resume(path) {
+		var txt = await this.readFile(path, 'utf8'),
 			arr = txt.split('\r\n', 2);
 		ehD.DOM.range.value = arr[1];
-		yield parseGlobals(ehD.DOM.url.value = arr[0]).catch(FATALERR);
+		await parseGlobals(ehD.DOM.url.value = arr[0]).catch(FATALERR);
 		isResume = true;
 		pushDialog('\nResume fetching images.\n');
 		dirName = getReplacedName(ehD.conf['dir-name'] || '{gid}_{token}') + '/';
 		return getAllPagesURL();
-	}),
-	init: co.wrap(function * () {
+	},
+	async init() {
 		var DOM = this.DOM;
 		for (var i in DOM) DOM[i] = document.getElementsByClassName(DOM[i])[0];
 		this.regEvents();
 		Object.assign(this.conf, this.defConf);
-		this.setData(yield this.read('config.json', 'utf8').then(function (txt) {
+		this.setData(await this.readFile('config.json', 'utf8').then(function (txt) {
 			try {
 				return JSON.parse(txt);
 			} catch (e) {
 				return this.writeDefConf(e);
 			}
 		}, this.writeDefConf.bind(this)));
-	})
+	}
 };
+['mkdir', 'readFile', 'stat', 'unlink', 'writeFile'].forEach(function (name) {
+	ehD[name] = po(fs[name], fs)
+});
 document.addEventListener('DOMContentLoaded', function () {
 	ehD.init().catch(ERRLOG)
 });
@@ -258,15 +254,15 @@ document.addEventListener('DOMContentLoaded', function () {
 var ehDownloadRegex = {
 	nl: /return nl\('([\d-]+)'\)/,
 	fileName: /g\/l.png" \/><\/a><\/div><div>([\s\S]+?) :: /,
-	resFileName: /filename=([\s\S]+?)\n/,
-	pagesRange: /^(\d+(-\d+)?\s*?,\s*?)*\d+(-\d+)?$/,
+	resFileName: /filename=['"]?([\s\S]+?)['"]?$/m,
+	pagesRange: /^(\d*(-\d*)?\s*?,\s*?)*\d*(-\d*)?$/,
 	pagesURL: /(?:<a href=").+?(?=")/gi
 };
 
 var globals = {};
 //parseGlobals("http://r.e-hentai.org/g/900435/ebff9581b9/").then(function(e){console.log(e)},ERRLOG);
 
-var parseGlobals = co.wrap(function * (url) {
+async function parseGlobals(url) {
 	pushDialog('Parsing: ' + url);
 	if (!(url = url || ehD.DOM.url.value)) return FATALERR('URL is empty.');
 	url = url.split('?', 1)[0];
@@ -284,7 +280,7 @@ var parseGlobals = co.wrap(function * (url) {
         reg6 = / id\="comment_0"[^>]*\>(.+?)\<\/div\>/;
     reg1.arr = ['base_url', 'gid', 'token', 'apiuid', 'apikey', 'original_rating'];
     reg2.arr = ['title', 'subtitle', 'tag', 'uploader'];
-    var match, e, txt = yield ehD.get(url);
+    var match, e, txt = await ehD.get(url);
 	globals = {url};
     // r.e-hentai.org points all links to g.e-hentai.org
     if (url.startsWith('http://r.e-hentai.org/')) {
@@ -297,7 +293,7 @@ var parseGlobals = co.wrap(function * (url) {
 		imageURL: [
 			RegExp('<a href="(' + _origin + '\/fullimg\\.php\\?\\S+?)"'),
 			/<img id="img" src="(\S+?)"/,
-			/<\/iframe><a[\s\S]+?><img src="(\S+?)"/
+			/<\/(?:script|iframe)><a[\s\S]+?><img src="(\S+?)"/ // Sometimes preview image may not have id="img"
 		],
 		nextFetchURL: [
 			RegExp('<a id="next"[\\s\\S]+?href="(' + _origin + '\\/s\\/\\S+?)"'),
@@ -309,7 +305,7 @@ var parseGlobals = co.wrap(function * (url) {
     for (e of ['gid', 'apiuid', 'original_rating']) globals[e] -= 0;
 	// gallery information
     parse(txt, reg2, globals);
-    for (e of reg2.arr) globals[e] = getPurifyName(globals[e]);
+    for (e of reg2.arr) globals[e] = getPurifiedName(globals[e]);
     globals.subtitle = globals.subtitle || globals.title;
 	// description
     var desc = globals.description = [];
@@ -323,7 +319,7 @@ var parseGlobals = co.wrap(function * (url) {
 	// uploader comment
     if (match = reg6.exec(txt)) globals.uploaderComment = match[1].replace(/<br>|<br \/>/gi, '\n');
     return globals
-});
+}
 
 // ==========---------- Main Function Starts Here ----------========== //
 var retryCount = 0;
@@ -364,7 +360,7 @@ String.prototype.replaceOrigin = function () {
 };
 
 function pushDialog(str) {
-	if (typeof str === 'string') ehD.DOM.dialog.innerHTML += str.replace(/\n/gi, '<br>');
+	if (typeof str === 'string') ehD.DOM.dialog.insertAdjacentHTML('afterend', str.replace(/\n/gi, '<br>'));
 	else ehD.DOM.dialog.appendChild(str);
 	ehD.DOM.dialog.scrollTop = ehD.DOM.dialog.scrollHeight;
 }
@@ -375,7 +371,7 @@ function getReplacedName(str) {
 	}).replaceHTMLEntites();
 }
 
-function getPurifyName(name) {
+function getPurifiedName(name) {
 	return name.trim().replace(/[:"'*?|<>\/\\\n]/g, '-');
 }
 
@@ -394,7 +390,7 @@ function getUniqueFileName(pageData) {
 function PageData(pageURL, imageURL, imageName, nextNL, realIndex) {
 	this.pageURL = pageURL.split('?')[0];
 	this.imageURL = imageURL;
-	this.imageName = getPurifyName(imageName);
+	this.imageName = getPurifiedName(imageName);
 	this.nextNL = nextNL;
 	this.realIndex = realIndex;
 	this.imageNumber = '';
@@ -473,7 +469,7 @@ var fetchImg = {
 			}
 			fail = null;
 			var matches = res.rawHeaders.join('\n').match(ehDownloadRegex.resFileName);
-			if (matches) image.imageName = getPurifyName(matches[1]);
+			if (matches) image.imageName = getPurifiedName(matches[1]);
 			var path = dirName + getUniqueFileName(image);
 			speedInfo.total = res.headers['content-length'];
 			fetchImg.listenAndPipe(res, fs.createWriteStream(path, 'binary'), speedInfo.total ? function (chunk) {
@@ -594,7 +590,7 @@ var fetchImg = {
 		for (var arr = [], index = 0; index < imageList.length; index++) {
 			if ('Fetched' !== imageData[index]) arr.push(index + 1);
 		}
-		return ehD.write(dirName + 'resume.txt', globals.url + '\r\n' + arr.join(), 'utf8').then(fetchImg.addExitButton).catch(ERRLOG);
+		return ehD.writeFile(dirName + 'resume.txt', globals.url + '\r\n' + arr.join(), 'utf8').then(fetchImg.addExitButton).catch(ERRLOG);
 	},
 	writeInfo() {
 		isDownloading = isDownloadingImg = false;
@@ -602,7 +598,7 @@ var fetchImg = {
 		pushDialog('\n\nFinish downloading at ' + new Date());
 		logStr += '\n\nFinish downloading at ' + new Date() + '\n\nGenerated by E-Hentai Downloader for NW.js(https://github.com/8qwe24657913/E-Hentai-Downloader-NW.js). Thanks to E-Hentai Downloader(https://github.com/8qwe24657913/E-Hentai-Downloader-NW.js)';
 		isResume && ehD.unlink(dirName + 'resume.txt').catch(ERRLOG);
-		return ehD.write(dirName + 'info.txt', logStr.replace(/\n/gi, '\r\n'), 'utf8').then(fetchImg.addExitButton).catch(ERRLOG);
+		return ehD.writeFile(dirName + 'info.txt', logStr.replace(/\n/gi, '\r\n'), 'utf8').then(fetchImg.addExitButton).catch(ERRLOG);
 	},
 	abortAll() {
 		isDownloading = isDownloadingImg = false;
@@ -748,7 +744,7 @@ function getAllPagesURL() {
 		ehD.DOM.dialog.classList.add('hide');
 		return alert('Pages Range is not correct.');
 	}
-	var pagesRangeScale = pagesRangeText.match(/\d+-\d+|\d+/g);
+	var pagesRangeScale = pagesRangeText.match(/\d*-\d*|\d+/g);
 	pagesRangeScale.forEach(function (elem) {
 		if (elem.indexOf('-') < 0) {
 			var curElem = Number(elem);
@@ -756,7 +752,10 @@ function getAllPagesURL() {
 				return curElem === e;
 			})) pagesRange.push(curElem);
 		} else {
-			for (var i = Number(elem.split('-')[0]); i <= Number(elem.split('-')[1]); Number(elem.split('-')[0]) < Number(elem.split('-')[1]) ? i++ : i--) {
+			let start = Number(elem.split('-')[0] || 1),
+				end = Number(elem.split('-')[1]) || globals.pageNum;
+			[start, end] = [start, end].sort();
+			for (var i = start; i <= end; i++) {
 				if (!pagesRange.some(function (e) {
 					return i === e;
 				})) pagesRange.push(i);
@@ -808,7 +807,7 @@ function getAllPagesURL() {
 	}
 }
 
-var ehDownload = co.wrap(function * () {
+function ehDownload() {
 	imageList = [];
 	imageData = [];
 	fetchThread = [];
@@ -860,7 +859,7 @@ var ehDownload = co.wrap(function * () {
 		if (ehD.conf['number-images']) {
 			// Number images, thanks to JingJang@GitHub, source: https://github.com/JingJang/E-Hentai-Downloader
 			if (pagesRange.length === 0 || !isResume && !ehD.conf['number-real-index']) {
-				var len = imageList.length.toString().length/* + 1*/, //Why plus 1?
+				var len = imageList.length.toString().length/* + 1*/, //Why plus 1? plus 1 second?
 					padding = new Array(len + 1).join('0');
 				imageList.forEach(function (elem, index) {
 					elem.imageNumber = (padding + (index + 1)).slice(0 - len);
@@ -877,8 +876,8 @@ var ehDownload = co.wrap(function * () {
 		fetchImg.addThreads();
 	});
 	pushDialog('Start downloading at ' + new Date() + '\nStart fetching images\' URL...\nFetching Page 1: ' + fetchURL + ' ... ');
-})
+}
 
-process.on('unhandledRejection', function(reason, p) { //然并卵
+process.on('unhandledRejection', function(reason, p) {
     console.log("Unhandled Rejection at: Promise ", p, " reason: ", reason);
 });

@@ -11,7 +11,7 @@ if (!Object.assign) Object.assign = function (target) {
 }
 
 // Make NodeList & HTMLCollection iterable
-NodeList.prototype[Symbol.iterator] = HTMLCollection.prototype[Symbol.iterator] = Array.prototype[Symbol.iterator];
+FileList.prototype[Symbol.iterator] = NodeList.prototype[Symbol.iterator] = HTMLCollection.prototype[Symbol.iterator] = Array.prototype[Symbol.iterator];
 
 //Copy & paste & devtools
 var gui = require('nw.gui');
@@ -78,3 +78,20 @@ win.on('minimize', function () {
 window.addEventListener('load', function () {
     win.show();
 });
+
+function po(fn, ctx) {
+    return function(...args) {
+        ctx = ctx || global || window;
+        return new Promise(function(res, rej) {
+            args.push(function(err, ret) {
+                if (err) return rej(err);
+                res(ret);
+            });
+            try {
+                fn.apply(ctx, args);
+            } catch (err) {
+                rej(err);
+            }
+        });
+    };
+};

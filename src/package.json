@@ -24,7 +24,7 @@
 		"title": "E-Hentai Downloader",
 		"icon": "icon.png",
 		"width": 700,
-		"height": 600,
+		"height": 650,
 		"toolbar": false,
 		"resizable": false,
 		"fullscreen": false,
