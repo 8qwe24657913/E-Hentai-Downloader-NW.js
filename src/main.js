@@ -276,7 +276,7 @@ var parseGlobals = co.wrap(function * (url) {
 		var res = reg.exec(txt), l = res.length;
 		while (--l > 0) globals[reg.arr[l - 1]] = res[l];
     }
-    var reg1 = /var base_url \= "([^"]+)";\nvar gid = (\d+);\nvar token \= "([^"]+)";\nvar apiuid \= (\-?\d+);\nvar apikey \= "([^"]+)";\nvar (?:original|average)_rating \= (\d+(?:\.\d+)?);/g,
+    var reg1 = /var base_url \= "([^"]+)";[\s\S]*\nvar gid = (\d+);\nvar token \= "([^"]+)";\nvar apiuid \= (\-?\d+);\nvar apikey \= "([^"]+)";\nvar (?:original|average)_rating \= (\d+(?:\.\d+)?);/g,
         reg2 = /\<h1 id\="gn"\>([^\<]*)\<\/h1\>\<h1 id\="gj"\>([^\<]*)\<\/h1\>.*alt="([^"]+)" class="ic".*\<div id\="gdn"\>\<a [^\<]+\>([^\<]+)\<\/a\>/g,
         reg3 = /class\="gdt1"[^\>]*\>([^\<]+)<\/td\><td [^\>]*class\="gdt2"[^\>]*\>([^\<]+)\</g,
         reg4 = /onclick\="sp\((\d+)\)"/g,
