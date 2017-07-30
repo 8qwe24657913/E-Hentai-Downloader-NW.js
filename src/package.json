@@ -9,10 +9,6 @@
 		"name": "8qwe24657913"
 	}],
 	"bugs": "https://github.com/8qwe24657913/E-Hentai-Downloader-NW.js/issues",
-	"dependencies": {
-		"co": "^4.6.0",
-		"po": "^4.5.2"
-	},
 	"licenses": "GPLv3",
 	"repository": {
 		"type": "git",
@@ -29,6 +25,6 @@
 		"resizable": false,
 		"fullscreen": false,
 		"show": false,
-		"frame": false
+		"frame": true
 	}
 }
