@@ -13,7 +13,10 @@ Directly Download E-Hentai archive as folder with less memory usage than [The us
 
 
 ## Download
-- Download [nw.js](http://nwjs.io/downloads/) and put [package.nw](https://github.com/8qwe24657913/E-Hentai-Downloader-NW.js/raw/master/package.nw) in the same folder
+- Download [nw.js](http://nwjs.io/downloads/) and put **unzipped** [package.nw](https://github.com/8qwe24657913/E-Hentai-Downloader-NW.js/raw/master/package.nw) folder in the same folder
+> **Notice:** As in [this issue](https://github.com/8qwe24657913/E-Hentai-Downloader-NW.js/issues/1)
+> * if you just put **file** `package.nw` in, images downloaded will be saved in your temporary folder
+> * if you unzip(You can simply rename it to package.nw.zip) it in a **folder** named `package.nw`, they will be saved in the folder named `package.nw`
 
 
 ## How To Use
