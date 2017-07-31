@@ -1,6 +1,7 @@
 'use strict';
 var fs = require('fs'),
 	http = require('http'),
+	https = require('https'),
 	url = require('url'),
 	stream = require('stream'),
 	gui = require('nw.gui');
@@ -31,6 +32,7 @@ function FATALERR(err) {
 }
 const ehD = {
 	conf: {},
+	config_txt: '',
 	defConf: {
 		cookie: '',
 		'thread-count': 5,
@@ -52,24 +54,26 @@ const ehD = {
 		dialog: 'ehD-dialog'
 	},
 	getReqOpt(href) {
-		var proxy = gui.App.getProxyForURL(href).match(/^PROXY\s+([^:]+):(\d+)/),
+		var proxy = gui.App.getProxyForURL(href).match(/^(PROXY|HTTP|HTTPS)\s+([^:]+):(\d+)/),
 			parsed = url.parse(href),
 			host = parsed.hostname || parsed.host,
 			opts = proxy ? {
+				protocol: proxy[1] === 'HTTPS' ? 'https:' : 'http:',
 				path: href,
-				host: proxy[1],
-				port: Number(proxy[2]),
+				host: proxy[2],
+				port: Number(proxy[3]),
 				headers: {
 					Host: host
 				}
 			} : parsed;
-		opts.headers || (opts.headers = {});
-		if (/(^|\.)e[\-x]hentai\.org$/.test(host)) opts.headers.cookie = this.conf.cookie;
+		if (!opts.headers) opts.headers = {};
+		/*if (/(^|\.)e[\-x]hentai\.org$/.test(host)) */opts.headers.cookie = this.conf.cookie;
 		return opts;
 	},
 	get: po(function (href, code, callback) {
 		if (!callback) callback = code, code = {};
-		var req = http.get('[object String]' === ({}).toString.call(href) ? ehD.getReqOpt(href) : href, function (res) {
+		const opts = '[object String]' === ({}).toString.call(href) ? ehD.getReqOpt(href) : href;
+		var req = (opts.protocol === 'https:' ? https : http).get(opts, function (res) {
 			var chunks = [];
 			res.on('data', function (chunk) {
 				chunks.push(chunk);
@@ -110,7 +114,7 @@ const ehD = {
 			}, fail).catch(ERRLOG);
 		}
 		function fail() {
-			request.abort();
+			request && request.abort();
 			request = null;
 			successed = false;
 			if (onfail) {
@@ -145,7 +149,9 @@ const ehD = {
 		};
 		conf['number-images'] = this.DOM.numberInput.checked;
 		conf['number-separator'] = getPurifiedName(conf['number-separator']);
-		return this.writeFile('config.json', JSON.stringify(this.conf = Object.assign({}, this.defConf, conf), null, '\t'), 'utf8').catch(ERRLOG);
+		const config = JSON.stringify(this.conf = Object.assign({}, this.defConf, conf), null, '\t');
+		if (config === this.config_txt) return Promise.resolve();
+		return this.writeFile('config.json', config, 'utf8').then(() => this.config_txt = config).catch(ERRLOG);
 	},
 	setData(conf) {
 		var def = this.defConf;
@@ -179,6 +185,7 @@ const ehD = {
 			event.preventDefault();
 			if (isDownloading && !confirm('E-Hentai Downloader is working now, are you sure to stop downloading and start a new download?')) return;
 			isResume = false;
+			ehD.save(); // auto save
 			ehD.DOM.dialog.innerHTML = '';
 			ehD.DOM.dialog.classList.remove('hide');
 			await parseGlobals(ehD.DOM.url.value).catch(FATALERR);
@@ -217,8 +224,8 @@ const ehD = {
 	},
 	writeDefConf(e) {
 		console.warn('config.json is missing or broken, error message:', e, 'trying applying default config.');
-		this.writeFile('config.json', JSON.stringify(this.defConf, null, '\t'), 'utf8').catch(ERRLOG);
-		return null;
+		const config = JSON.stringify(this.defConf, null, '\t');
+		return this.writeFile('config.json', config, 'utf8').then(() => this.config_txt = config).catch(ERRLOG);
 	},
 	async resume(path) {
 		var txt = await this.readFile(path, 'utf8'),
@@ -235,7 +242,8 @@ const ehD = {
 		for (var i in DOM) DOM[i] = document.getElementsByClassName(DOM[i])[0];
 		this.regEvents();
 		Object.assign(this.conf, this.defConf);
-		this.setData(await this.readFile('config.json', 'utf8').then(function (txt) {
+		this.setData(await this.readFile('config.json', 'utf8').then(txt => {
+			this.config_txt = txt;
 			try {
 				return JSON.parse(txt);
 			} catch (e) {
@@ -272,13 +280,12 @@ async function parseGlobals(url) {
 		var res = reg.exec(txt), l = res.length;
 		while (--l > 0) globals[reg.arr[l - 1]] = res[l];
     }
-    var reg1 = /var base_url \= "([^"]+)";[\s\S]*\nvar gid = (\d+);\nvar token \= "([^"]+)";\nvar apiuid \= (\-?\d+);\nvar apikey \= "([^"]+)";\nvar (?:original|average)_rating \= (\d+(?:\.\d+)?);/g,
+    var reg1 = /<script[^>]*>([^<]*var base_url[^<]*)<\/script>/,
         reg2 = /\<h1 id\="gn"\>([^\<]*)\<\/h1\>\<h1 id\="gj"\>([^\<]*)\<\/h1\>.*alt="([^"]+)" class="ic".*\<div id\="gdn"\>\<a [^\<]+\>([^\<]+)\<\/a\>/g,
         reg3 = /class\="gdt1"[^\>]*\>([^\<]+)<\/td\><td [^\>]*class\="gdt2"[^\>]*\>([^\<]+)\</g,
         reg4 = /onclick\="sp\((\d+)\)"/g,
 		reg5 = /\<a href\="([^"]+)"\>\<img alt\="/,
         reg6 = / id\="comment_0"[^>]*\>(.+?)\<\/div\>/;
-    reg1.arr = ['base_url', 'gid', 'token', 'apiuid', 'apikey', 'original_rating'];
     reg2.arr = ['title', 'subtitle', 'tag', 'uploader'];
     var match, e, txt = await ehD.get(url);
 	globals = {url};
@@ -300,24 +307,36 @@ async function parseGlobals(url) {
 			RegExp('<a href="(' + _origin + '\\/s\\/\\S+?)"><img src="http://ehgt.org/g/n.png"')
 		]
 	});
+	console.log('Start parsing:', url);
 	// js variables
-    parse(txt, reg1, globals);
-    for (e of ['gid', 'apiuid', 'original_rating']) globals[e] -= 0;
+	console.log('Parsing:', 'js variables');
+	match = txt.match(reg1);
+	const context = {};
+	if (!match) throw new Error('Get js variables failed.');
+	require('vm').runInNewContext(match[1], context);
+    if (!context.original_rating) context.original_rating = context.average_rating;
+    for (e of ['base_url', 'gid', 'token', 'apiuid', 'apikey', 'original_rating']) globals[e] = context[e];
 	// gallery information
+	console.log('Parsing:', 'gallery information');
     parse(txt, reg2, globals);
     for (e of reg2.arr) globals[e] = getPurifiedName(globals[e]);
     globals.subtitle = globals.subtitle || globals.title;
 	// description
+	console.log('Parsing:', 'description');
     var desc = globals.description = [];
     while (match = reg3.exec(txt)) desc.push((match[1] + ' ' + match[2]).replaceHTMLEntites());
 	// page num
+	console.log('Parsing:', 'page num');
     var max = 0;
     while (match = reg4.exec(txt)) if ((match = Number(match[1])) > max) max = match;
     globals.pageNum = max + 1;
-	//first url
+	// first url
+	console.log('Parsing:', 'first url');
 	globals.firstUrl = reg5.exec(txt)[1].replaceOrigin();
 	// uploader comment
+	console.log('Parsing:', 'uploader comment');
     if (match = reg6.exec(txt)) globals.uploaderComment = match[1].replace(/<br>|<br \/>/gi, '\n');
+	console.log('Finished parsing.');
     return globals
 }
 
@@ -360,7 +379,7 @@ String.prototype.replaceOrigin = function () {
 };
 
 function pushDialog(str) {
-	if (typeof str === 'string') ehD.DOM.dialog.insertAdjacentHTML('afterend', str.replace(/\n/gi, '<br>'));
+	if (typeof str === 'string') ehD.DOM.dialog.insertAdjacentHTML('beforeend', str.replace(/\n/gi, '<br>'));
 	else ehD.DOM.dialog.appendChild(str);
 	ehD.DOM.dialog.scrollTop = ehD.DOM.dialog.scrollHeight;
 }
@@ -438,7 +457,7 @@ var fetchImg = {
 			loaded: 0,
 			total: 0
 		};
-		var req = http.request(options, function (res) {
+		var req = (options.protocol === 'https:' ? https : http).request(options, function (res) {
 			function fail(a, b, c) {
 				fetchImg.fail(a, b, c, index, status, res);
 			}
@@ -596,7 +615,7 @@ var fetchImg = {
 		isDownloading = isDownloadingImg = false;
 		for (var elem of imageList) logStr += '\n\nPage ' + elem.realIndex + ': ' + elem.pageURL + '\nImage ' + elem.realIndex + ': ' + elem.imageName /*+ '\nImage URL: ' + elem.imageURL*/; // Image URL may useless, see https://github.com/ccloli/E-Hentai-Downloader/issues/6
 		pushDialog('\n\nFinish downloading at ' + new Date());
-		logStr += '\n\nFinish downloading at ' + new Date() + '\n\nGenerated by E-Hentai Downloader for NW.js(https://github.com/8qwe24657913/E-Hentai-Downloader-NW.js). Thanks to E-Hentai Downloader(https://github.com/8qwe24657913/E-Hentai-Downloader-NW.js)';
+		logStr += '\n\nFinish downloading at ' + new Date() + '\n\nGenerated by E-Hentai Downloader for NW.js(https://github.com/8qwe24657913/E-Hentai-Downloader-NW.js). Thanks to E-Hentai Downloader(https://github.com/ccloli/E-Hentai-Downloader)';
 		isResume && ehD.unlink(dirName + 'resume.txt').catch(ERRLOG);
 		return ehD.writeFile(dirName + 'info.txt', logStr.replace(/\n/gi, '\r\n'), 'utf8').then(fetchImg.addExitButton).catch(ERRLOG);
 	},
@@ -708,6 +727,7 @@ function retryAllFailed() {
 			return fetchURL;
 		}, function (result, send, fail) {
 			var image = imageList[index];
+			if (!image) return;
 			var imageURL = (globals.apiuid !== -1 && result.indexOf('fullimg.php') >= 0 && !ehD.conf['force-resized']) ? result.match(ehDownloadRegex.imageURL[0])[1].replaceHTMLEntites() : result.indexOf('id="img"') > -1 ? result.match(ehDownloadRegex.imageURL[1])[1].replaceHTMLEntites() : result.match(ehDownloadRegex.imageURL[2])[1].replaceHTMLEntites(); // Sometimes preview image may not have id="img"
 			image.imageURL = imageURL;
 			var nextNL = ehDownloadRegex.nl.test(result) ? result.match(ehDownloadRegex.nl)[1] : null;

@@ -10,9 +10,6 @@ if (!Object.assign) Object.assign = function (target) {
 	return output;
 }
 
-// Make NodeList & HTMLCollection iterable
-FileList.prototype[Symbol.iterator] = NodeList.prototype[Symbol.iterator] = HTMLCollection.prototype[Symbol.iterator] = Array.prototype[Symbol.iterator];
-
 //Copy & paste & devtools
 var gui = require('nw.gui');
 var win = gui.Window.get();
