@@ -1,13 +1,13 @@
 {
 	"cookie": "",
-	"thread-count": 5,
+	"threadCount": 5,
 	"timeout": 60,
-	"retry-count": 3,
-	"dir-name": "{gid}_{token}",
-	"number-images": true,
-	"number-separator": "：",
-	"force-resized": false,
-	"number-real-index": true,
-	"never-new-url": false,
-	"never-send-nl": false
+	"retryCount": 3,
+	"dirName": "{gid}_{token}",
+	"numberImages": true,
+	"numberSeparator": "：",
+	"forceResized": false,
+	"numberRealIndex": true,
+	"neverNewUrl": false,
+	"neverSendNl": false
 }
