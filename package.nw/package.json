@@ -2,12 +2,22 @@
 	"name": "EHDownloader-NW.js",
 	"description": "E-Hentai Downloader for NW.js",
 	"version": "0.1.0",
-	"keywords": ["E-Hentai", "E Hentai", "E-Hentai Downloader", "E Hentai Downloader", "EHDownloader", "EHD"],
-	"maintainers": [{
-		"name": "864907600cc"
-	}, {
-		"name": "8qwe24657913"
-	}],
+	"keywords": [
+		"E-Hentai",
+		"E Hentai",
+		"E-Hentai Downloader",
+		"E Hentai Downloader",
+		"EHDownloader",
+		"EHD"
+	],
+	"maintainers": [
+		{
+			"name": "864907600cc"
+		},
+		{
+			"name": "8qwe24657913"
+		}
+	],
 	"bugs": "https://github.com/8qwe24657913/E-Hentai-Downloader-NW.js/issues",
 	"licenses": "GPL-3.0",
 	"repository": {
@@ -26,5 +36,8 @@
 		"fullscreen": false,
 		"show": false,
 		"frame": true
+	},
+	"dependencies": {
+		"proxy-agent": "^2.1.0"
 	}
 }
