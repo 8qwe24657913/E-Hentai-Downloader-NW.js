@@ -13,7 +13,7 @@ Directly Download E-Hentai archive as folder with less memory usage than [The us
 
 
 ## Download
-- Download [nw.js](http://nwjs.io/downloads/) and [this repo](https://github.com/8qwe24657913/E-Hentai-Downloader-NW.js/archive/v0.13+.zip),  [package.nw](https://github.com/8qwe24657913/E-Hentai-Downloader-NW.js/raw/master/package.nw) folder in the same folder as `nw.exe`
+- Download [nw.js](http://nwjs.io/downloads/) and [this repo](https://github.com/8qwe24657913/E-Hentai-Downloader-NW.js/archive/v0.13+.zip), and decompress them, then put [package.nw](https://github.com/8qwe24657913/E-Hentai-Downloader-NW.js/raw/master/package.nw) folder in the same folder as `nw.exe`
 
 
 ## How To Use
