@@ -45,7 +45,10 @@ It won't download archive from E-Hentai archive download page, so it won't spend
 
 ## Proxy
 
-EHD-NW.js will use your system HTTP proxy(PACs are also available), HTTPS/SOCKS proxies is on the way
+EHD-NW.js will use your system proxy if `Assign Proxy` is not checked.
+if it's checked, a text input will appear.
+- if the text input is empty, EHD-NW.js won't use any proxy
+- To assign a proxy, check [proxy-agent](https://github.com/TooTallNate/node-proxy-agent) for more details.
 
 
 ## Should Be Noticed
@@ -61,7 +64,6 @@ To record running progress, script will output some logs into console (Right Cli
 
 ## Todos
 
-- Support HTTPS/SOCKS proxies (HTTP proxy is already supported)
 - Make the code tidier (这个真不是我的锅，cc的代码比这还乱……)
 
 ## Report A Bug
