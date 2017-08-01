@@ -1,101 +1,105 @@
 <!DOCTYPE html>
 <html>
-	<head>
-		<meta charset="utf-8">
-		<title>E-Hentai Downloader</title>
-		<link rel="stylesheet" type="text/css" href="main.css">
-	</head>
-	<body>
-		<script src="hacks.js"></script>
-		<script src="main.js"></script>
 
-		<fieldset style="border: 1px groove rgb(0, 0, 0);" class="ehD-box">
-			<legend style="font-weight: 700;">E-Hentai Downloader</legend>
-			<div>
-				<label>URL: </label>
-				<input type="text" class="ehD-url" placeholder="http://g.e-hentai.org/g/123456/abcdef1234/" style="width:500px">
-			</div>
-			<div class="g2">
-				<img src="mr.gif">
-				<a class="ehD-start">Download Archive</a>
-			</div>
-			<div class="g2">
-				<img src="mr.gif">
-				<a><label><input type="checkbox" class="ehD-number" style="vertical-align: middle; margin: 0;"> Number Images<label></label></label></a>
-			</div>
-			<div class="g2">
-				<img src="mr.gif">
-				<a><label>Pages Range <input type="text" class="ehD-range" placeholder="eg. -10,12,14-20,27,30-"></label></a>
-			</div>
-		</fieldset>
+    <head>
+        <meta charset="utf-8">
+        <title>E-Hentai Downloader</title>
+        <link rel="stylesheet" type="text/css" href="main.css">
+    </head>
 
-		<div class="ehD-dialog hide"></div>
-		<div class="ehD-setting">
-			<div class="g2">
-				<label>Cookie: 
-					<input type="text" data-ehd-setting="cookie" placeholder="ipb_member_id=xxx; ipb_pass_hash=xxx; igneous=xxx"
-					style="width: 500px;"></label>
-			</div>
-			<div class="g2">
-				<label>Download
-					<input type="number" data-ehd-setting="thread-count" min="1" placeholder="5"
-					style="width: 51px;">images at the same time (&lt;=5 is advised)</label>
-			</div>
-			<div class="g2">
-				<label>Abort fetching current image after
-					<input type="number" data-ehd-setting="timeout"
-					min="0" placeholder="300" style="width: 51px;">second(s) (0 is never abort)</label>
-			</div>
-			<div class="g2">
-				<label>Skip current image when retried
-					<input type="number" data-ehd-setting="retry-count"
-					min="1" placeholder="3" style="width: 51px;">time(s)</label>
-			</div>
-			<div class="g2">
-				<label>Set folder name as
-					<input type="text" data-ehd-setting="dir-name" placeholder="{gid}_{token}"> *</label>
-			</div>
-			<div class="g2">
-				<label>
-					<input type="checkbox" data-ehd-setting="number-images">Number images (001：01.jpg, 002：01_theme.jpg, 003：02.jpg...) (Separator
-					<input
-					type="text" data-ehd-setting="number-separator" style="width: 51px;" placeholder="：">)</label>
-			</div>
-			<div class="g2">
-				<label>
-					<input type="checkbox" data-ehd-setting="number-real-index">Number images with original page number if pages range is set</label>
-			</div>
-			<div class="g2">
-				<label>
-					<input type="checkbox" data-ehd-setting="force-resized">Force download resized image (never download original image) **</label>
-			</div>
-			<div class="g2">
-				<label>
-					<input type="checkbox" data-ehd-setting="never-new-url">Never get new image URL when failed downloading image **</label>
-			</div>
-			<div class="g2">
-				<label>
-					<input type="checkbox" data-ehd-setting="never-send-nl">Never send "nl" GET parameter when getting new image URL **</label>
-			</div>
-			<div class="g2">* Enabled tags:
-				<span title="You can find GID and token at the address bar like this: exhentai.org/g/[GID]/[Token]/">{gid} Archive's GID |
+    <body>
+        <script src="hacks.js"></script>
+        <script src="main.js"></script>
+        <fieldset style="border: 1px groove rgb(0, 0, 0);" class="ehD-box">
+            <legend style="font-weight: 700;">E-Hentai Downloader</legend>
+            <div>
+                <label>URL: </label>
+                <input type="text" class="ehD-url" placeholder="http://g.e-hentai.org/g/123456/abcdef1234/" style="width:500px">
+            </div>
+            <div class="g2">
+                <img src="mr.gif">
+                <a class="ehD-start">Download Archive</a>
+            </div>
+            <div class="g2">
+                <img src="mr.gif">
+                <a>
+                    <label>
+                        <input type="checkbox" class="ehD-number" style="vertical-align: middle; margin: 0;"> Number Images
+                        <label></label>
+                    </label>
+                </a>
+            </div>
+            <div class="g2">
+                <img src="mr.gif">
+                <a>
+                    <label>Pages Range
+                        <input type="text" class="ehD-range" placeholder="eg. -10,12,14-20,27,30-">
+                    </label>
+                </a>
+            </div>
+        </fieldset>
+        <div class="ehD-dialog hide"></div>
+        <div class="ehD-setting">
+            <div class="g2">
+                <label>Cookie:
+                    <input type="text" data-ehd-setting="cookie" placeholder="ipb_member_id=xxx; ipb_pass_hash=xxx; igneous=xxx" style="width: 500px;">
+                </label>
+            </div>
+            <div class="g2">
+                <label>Download
+                    <input type="number" data-ehd-setting="thread-count" min="1" placeholder="5" style="width: 51px;">images at the same time (&lt;=5 is advised)</label>
+            </div>
+            <div class="g2">
+                <label>Abort fetching current image after
+                    <input type="number" data-ehd-setting="timeout" min="0" placeholder="300" style="width: 51px;">second(s) (0 is never abort)</label>
+            </div>
+            <div class="g2">
+                <label>Skip current image when retried
+                    <input type="number" data-ehd-setting="retry-count" min="1" placeholder="3" style="width: 51px;">time(s)</label>
+            </div>
+            <div class="g2">
+                <label>Set folder name as
+                    <input type="text" data-ehd-setting="dir-name" placeholder="{gid}_{token}"> *</label>
+            </div>
+            <div class="g2">
+                <label>
+                    <input type="checkbox" data-ehd-setting="number-images">Number images (001：01.jpg, 002：01_theme.jpg, 003：02.jpg...) (Separator
+                    <input type="text" data-ehd-setting="number-separator" style="width: 51px;" placeholder="：">)</label>
+            </div>
+            <div class="g2">
+                <label>
+                    <input type="checkbox" data-ehd-setting="number-real-index">Number images with original page number if pages range is set</label>
+            </div>
+            <div class="g2">
+                <label>
+                    <input type="checkbox" data-ehd-setting="force-resized">Force download resized image (never download original image) **</label>
+            </div>
+            <div class="g2">
+                <label>
+                    <input type="checkbox" data-ehd-setting="never-new-url">Never get new image URL when failed downloading image **</label>
+            </div>
+            <div class="g2">
+                <label>
+                    <input type="checkbox" data-ehd-setting="never-send-nl">Never send "nl" GET parameter when getting new image URL **</label>
+            </div>
+            <div class="g2">* Enabled tags:
+                <span title="You can find GID and token at the address bar like this: exhentai.org/g/[GID]/[Token]/">{gid} Archive's GID |
 					<span title="You can find GID and token at the address bar like this: exhentai.org/g/[GID]/[Token]/">{token} Archive's token |
 						<span title="This title is the English title or Latin transliteration, you can find it as the first line of the title.">{title} Archive's title</span>|
-						<span title="This title is the original language title, you can find it as the second line of the title.">{subtitle} Archive's sub-title</span>|
-						<span title="This tag means the sort name of the archive, and its output string is upper.">{tag} Archive's tag</span>|
-						<span title="You can find it at the left of the archive page.">{uploader} Archive's uploader</span>
-					</span>
-				</span>
-			</div>
-			<div class="g2">** Enable these options may save your image viewing limits
-				<a href="https://github.com/ccloli/E-Hentai-Downloader/wiki/E%E2%88%92Hentai-Image-Viewing-Limits"
-				target="_blank" style="text-decoration: underline; color: #ffffff;">(See wiki)</a>, but may also cause some download problems.</div>
-			<div style="text-align: center">
-				<button id="save">Save</button>
-				<button id="cancel">Cancel</button>
-				<button id="exit">Exit</button>
-			</div>
-		</div>
-	</body>
+                <span title="This title is the original language title, you can find it as the second line of the title.">{subtitle} Archive's sub-title</span>|
+                <span title="This tag means the sort name of the archive, and its output string is upper.">{tag} Archive's tag</span>|
+                <span title="You can find it at the left of the archive page.">{uploader} Archive's uploader</span>
+                </span>
+                </span>
+            </div>
+            <div class="g2">** Enable these options may save your image viewing limits
+                <a href="https://github.com/ccloli/E-Hentai-Downloader/wiki/E%E2%88%92Hentai-Image-Viewing-Limits" target="_blank" style="text-decoration: underline; color: #ffffff;">(See wiki)</a>, but may also cause some download problems.</div>
+            <div style="text-align: center">
+                <button id="save">Save</button>
+                <button id="cancel">Cancel</button>
+                <button id="exit">Exit</button>
+            </div>
+        </div>
+    </body>
 
 </html>
