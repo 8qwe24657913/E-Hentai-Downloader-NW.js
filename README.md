@@ -47,8 +47,8 @@ It won't download archive from E-Hentai archive download page, so it won't spend
 
 EHD-NW.js will use your system proxy if `Assign Proxy` is not checked.
 if it's checked, a text input will appear.
+- To assign a proxy, fill the text input with `http://host:port` or `https://host:port`
 - if the text input is empty, EHD-NW.js won't use any proxy
-- To assign a proxy, check [proxy-agent](https://github.com/TooTallNate/node-proxy-agent) for more details.
 
 
 ## Should Be Noticed

@@ -37,7 +37,5 @@
 		"show": false,
 		"frame": true
 	},
-	"dependencies": {
-		"proxy-agent": "^2.1.0"
-	}
+	"dependencies": {}
 }
