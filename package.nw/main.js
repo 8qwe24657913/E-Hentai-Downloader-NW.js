@@ -111,7 +111,7 @@ const ehD = {
             if (retryCount < vm.retryCount) {
                 pushDialog('Failed! Retrying... ');
                 retryCount++;
-                ehD.getPage(url, retryCount);
+                return ehD.getPage(url, retryCount);
             } else {
                 throw err;
             }
