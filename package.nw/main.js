@@ -4,10 +4,7 @@ var fs = require('fs'),
     https = require('https'),
     url = require('url'),
     stream = require('stream'),
-    gui = require('nw.gui'),
-    ProxyAgent = require('proxy-agent');
-
-const dialog = document.getElementById('ehD-dialog');
+    gui = require('nw.gui');
 
 window.addEventListener('dragover', function(e) {
     e.stopPropagation();
@@ -18,8 +15,6 @@ window.addEventListener('drop', function(e) {
     e.preventDefault();
     for (var file of e.dataTransfer.files) {
         if ('resume.txt' === file.name) {
-            dialog.innerHTML = '';
-            dialog.classList.remove('hide');
             return ehD.resume(file.path).catch(ERRLOG)
         };
     }
@@ -64,86 +59,63 @@ const ehD = {
         neverSendNl: false
     },
     getReqOpt(href) {
-        var agent, opts = url.parse(href);
+        var proxy, matches, opts = url.parse(href);
         if (vm.proxy) {
-            if (vm.proxyUri) agent = new ProxyAgent(vm.proxyUri);
+            proxy = vm.proxyUri;
         } else {
-            var proxy = gui.App.getProxyForURL(href).split(';')[0].trim();
-            if (proxy && proxy !== 'DIRECT') {
-                agent = new ProxyAgent(proxy.replace(/^PROXY/, 'HTTP').replace(/^([A-Za-z0-9]+) /, '$1://').toLowerCase());
+            proxy = gui.App.getProxyForURL(href).split(';')[0].trim().toLowerCase().replace(/^proxy /, 'http ').replace(/^(https?) /, '$1://');
+        }
+        if (proxy && (matches = proxy.match(/^(?<protocol>https?:)\/\/(?<host>[^:]+):(?<port>\d+)/))) {
+            const { protocol, host, port } = matches.groups;
+            opts = {
+                path: href,
+                protocol,
+                host,
+                port,
+                headers: {
+                    Host: opts.host
+                }
             }
         }
-        if (agent) opts.agent = agent;
         if (!opts.headers) opts.headers = {};
-        opts.headers.cookie = vm.cookie;
+        if (/^(.*\.)?e[x\-]hentai.org$/.test(opts.host)) opts.headers.cookie = vm.cookie;
         return opts;
     },
-    get: po(function(href, code, callback) {
-        if (!callback) callback = code, code = {};
+    get: po(function(href, timeout, callback) {
+        if (!callback) callback = timeout, timeout = 0;
         const opts = '[object String]' === ({}).toString.call(href) ? ehD.getReqOpt(href) : href;
         var req = (opts.protocol === 'https:' ? https : http).get(opts, function(res) {
+            if (res.statusCode !== 200) callback(`${res.statusCode} ${res.statusMessage}`);
             var chunks = [];
             res.on('data', function(chunk) {
                 chunks.push(chunk);
             }).on('end', function() {
                 return callback(undefined, Buffer.concat(chunks).toString());
             });
-            code.res && code.res(res, req);
         });
-        code.req && code.req(req);
+        if (timeout) req.setTimeout(timeout, function() {
+            req.abort();
+            callback(new Error('Timeout'));
+        });
         req.on('error', callback);
         req.end();
         return req;
     }),
-    getPage(getUrl, callback, onfail) {
-        var url, request, retryCount = 0,
-            successed = true,
-            code = {
-                req: function(req) {
-                    request = req;
-                    req.setTimeout(30000, fail);
-                },
-                res: function(res) {
-                    if (res.statusCode !== 200) fail();
-                }
-            };
-
-        function send() {
-            if (successed) url = getUrl();
-            if (url) ehD.get(url, code).then(function(result) {
-                if (!result) return fail();
-                retryCount = 0;
-                successed = true;
-                try {
-                    callback(result, send, fail)
-                } catch (e) {
-                    ERRLOG(e);
-                    fail();
-                }
-                request = null;
-            }, fail).catch(ERRLOG);
-        }
-
-        function fail() {
-            request && request.abort();
-            request = null;
-            successed = false;
-            if (onfail) {
-                try {
-                    return onfail(send);
-                } catch (e) {
-                    return ERRLOG(e);
-                }
-            }
+    async getPage(url, retryCount = 0) {
+        try {
+            var result = await ehD.get(url, 30000);
+            if (!result) throw new Error('No content');
+            //return parser.parseFromString(result, 'text/html');
+            return result;
+        } catch (err) {
             if (retryCount < vm.retryCount) {
                 pushDialog('Failed! Retrying... ');
                 retryCount++;
-                send();
+                ehD.getPage(url, retryCount);
             } else {
-                pushDialog('Failed!\nFetch images\' URL failed, Please try again later.');
+                throw err;
             }
         }
-        send();
     },
     setData(data) {
         if (!data) {
@@ -292,42 +264,57 @@ var vm = new Vue({
         url: '',
         range: '',
         proxy: false,
-        proxyUri: ''
+        proxyUri: '',
+        contents: [],
+        table: []
     }, ehD.defConf),
     methods: {
         async start() {
             isResume = false;
             this.save(); // auto save
-            dialog.innerHTML = '';
-            dialog.classList.remove('hide');
             await ehD.parseGlobals(vm.url).catch(FATALERR);
-            if (globals.apiuid === -1 && !confirm('You are not log in to E-Hentai Forums, so you can\'t download original image. Continue?')) return dialog.classList.add('hide');
+            if (globals.apiuid === -1 && !confirm('You are not log in to E-Hentai Forums, so you can\'t download original image. Continue?')) return vm.contents = [];
             dirName = getReplacedName(vm.dirName) + '/';
             // check dir
             try {
                 var stat = await ehD.stat(dirName);
+                if (!stat.isDirectory()) {
+                    if (confirm('There is a file whose name is duplicated with dirName. Do you want to unlink it?')) {
+                        await ehD.unlink(dirName).catch(FATALERR);
+                        await ehD.mkdir(dirName).catch(FATALERR);
+                    } else return FATALERR('Same-name file didn\'t removed!');
+                } else {
+                    try {
+                        var resumeStat = await ehD.stat(dirName + 'resume.txt');
+                        if (resumeStat.isFile()) {
+                            return ehD.resume(dirName + 'resume.txt').catch(FATALERR);
+                        }
+                    } catch (e) {}
+                }
             } catch (e) {
                 if (-4058 !== e.errno) return FATALERR(e); // ENOENT
                 await ehD.mkdir(dirName).catch(FATALERR);
             }
-            if (!stat.isDirectory()) {
-                if (confirm('There is a file whose name is duplicated with dirName. Do you want to unlink it?')) {
-                    await ehD.unlink(dirName).catch(FATALERR);
-                    await ehD.mkdir(dirName).catch(FATALERR);
-                } else return FATALERR('Same-name file didn\'t removed!');
-            } else {
-                try {
-                    var resumeStat = await ehD.stat(dirName + 'resume.txt');
-                    if (!resumeStat.isDirectory()) {
-                        return ehD.resume(dirName + 'resume.txt').catch(FATALERR);
-                    }
-                } catch (e) {}
-            }
+            pushDialog('Start downloading at ' + new Date() + '\n');
+            logStr = globals.title;
+            if (globals.title !== globals.subtitle) logStr += '\n' + globals.subtitle;
+            logStr += `
+${globals.url.replaceHTMLEntites()}
+
+Category: ${globals.tag}
+Uploader: ${globals.uploader}
+${globals.description.join('\n')}
+Tags:
+${globals.tags.join('\n')}
+`;
+            if (globals.uploaderComment) logStr +=
+                `Uploader Comment:
+${globals.uploaderComment}
+`;
+            logStr += '\n'
+            pushDialog(logStr);
             // start
-            if (vm.range === '') {
-                if (pagesRange.length) pagesRange = [];
-                ehDownload();
-            } else getAllPagesURL();
+            getAllPagesURL();
         },
         async save() {
             const conf = {};
@@ -369,6 +356,19 @@ var vm = new Vue({
     }
 });
 
+(function() {
+    function scrollDialogIntoView() {
+        const dialog = document.getElementById('ehD-dialog'); // get element every time
+        if (dialog && (dialog.clientHeight + dialog.scrollTop < dialog.scrollHeight)) return; // user scrolled up
+        vm.$nextTick(function() {
+            const dialog = document.getElementById('ehD-dialog'); // get element every time
+            dialog.scrollTop = dialog.scrollHeight;
+        });
+    }
+    vm.$watch('contents.length', scrollDialogIntoView);
+    vm.$watch('table.length', scrollDialogIntoView);
+}());
+
 ehD.init().catch(ERRLOG);
 
 // ==========---------- Main Function Starts Here ----------========== //
@@ -381,7 +381,6 @@ var downloadedCount = 0;
 var fetchThread = [];
 var dirName;
 var failedCount = 0;
-var progressTable = null;
 var pagesRange = [];
 var isDownloadingImg = false;
 var isResume = false;
@@ -403,9 +402,7 @@ String.prototype.replaceOrigin = function() {
 };
 
 function pushDialog(str) {
-    if (typeof str === 'string') dialog.insertAdjacentHTML('beforeend', str.replace(/\n/gi, '<br>'));
-    else dialog.appendChild(str);
-    dialog.scrollTop = dialog.scrollHeight;
+    vm.contents.push(String(str));
 }
 
 function getReplacedName(str) {
@@ -415,7 +412,7 @@ function getReplacedName(str) {
 }
 
 function getPurifiedName(name) { // 半角与全角charCode相差65248
-    return name.trim().replace(/[:"'*?|<>\/\\\n]/g, chr => String.fromCharCode(chr.charCodeAt(0) + 65248)).replace(/\n/g, '-');
+    return name.trim().replace(/[:"'*?|<>\/\\]/g, chr => String.fromCharCode(chr.charCodeAt(0) + 65248)).replace(/\n/g, '-');
 }
 
 var fileNames = {};
@@ -434,39 +431,27 @@ function getUniqueFileName(pageData) {
     return pageData.imageName = oriName.substr(0, index) + count + oriName.substr(index);
 }
 
-function PageData(pageURL, imageURL, imageName, nextNL, realIndex) {
-    this.pageURL = pageURL.split('?')[0];
-    this.imageURL = imageURL;
-    this.imageName = getPurifiedName(imageName);
-    this.nextNL = nextNL;
-    this.realIndex = realIndex;
-    this.imageNumber = '';
+function appendProgressTable() {
+    const table = [];
+    vm.table = table;
+    vm.contents.push(table);
 }
 
 class Status {
     constructor(image) {
-        var node = this.self = document.createElement('tr');
-        node.innerHTML = `
-			<td class="ehD-pt-name">#${image.realIndex}: ${image.imageName}</td>
-			<td class="ehD-pt-progress-outer">
-				<progress class="ehD-pt-progress"></progress>
-				<span class="ehD-pt-progress-text"></span>
-			</td>
-			<td class="ehD-pt-status">Pending...</td>`;
-        Object.assign(this, {
-            fileName: node.getElementsByTagName('td')[0],
-            status: node.getElementsByTagName('td')[2],
-            progress: node.getElementsByTagName('progress')[0],
-            progressText: node.getElementsByTagName('span')[0]
-        });
-        progressTable.appendChild(node);
+        this.data = {
+            id: vm.id++,
+            className: '',
+            progress: -1,
+            progressText: '',
+            status: 'Pending...',
+            realIndex: image.realIndex,
+            imageName: image.imageName
+        };
+        vm.table.push(this.data);
     }
     set(data) {
-        if (!data) return this;
-        if ('class' in data) this.self.className = 'ehD-pt-item ' + data.class.trim();
-        if ('progress' in data) this.progress.setAttribute('value', data.progress);
-        for (var name of ['status', 'progressText', 'fileName'])
-            if (name in data) this[name].textContent = data[name];
+        Object.assign(this.data, data);
         return this;
     }
 }
@@ -481,14 +466,14 @@ var fetchImg = {
         options.headers.referer = options.headers['x-alt-referer'] = image.pageURL;
         options.method = 'GET';
         var speedInfo = {
-            lastTimestamp: new Date().getTime(),
+            lastTimestamp: Date.now(),
             lastProgress: 0,
             loaded: 0,
             total: 0
         };
         var req = (options.protocol === 'https:' ? https : http).request(options, function(res) {
-            function fail(a, b, c) {
-                fetchImg.fail(a, b, c, index, status, res);
+            function fail(desc, shortDesc, retryType) {
+                fetchImg.fail(desc, shortDesc, retryType, index, status, res);
             }
             if (res.statusCode !== 200) {
                 req.abort();
@@ -499,21 +484,22 @@ var fetchImg = {
                         fetchImg.run(index, status, res.headers.location);
                         break;
                     case 403:
-                        fail('403 Access Denied', 'Error 403', 1);
+                        fail('403 Access Denied', 'Error 403', 'abort');
                         break;
                     case 500:
-                        fail('500 Internal Server Error.(See: <a href="https://github.com/ccloli/E-Hentai-Downloader/issues/16">here</a> )', 'Error 500', 0);
+                        fail('500 Internal Server Error.(See: <a href="https://github.com/ccloli/E-Hentai-Downloader/issues/16">here</a> )', 'Error 500', 'retry');
                         break;
                     case 509:
                         fetchImg.reachedLimits(true, index, status, res);
+                        break;
                     default:
-                        fail('Wrong Response Status (See: <a href="https://github.com/ccloli/E-Hentai-Downloader/issues/16">here</a> )', 'Wrong Status', 0);
+                        fail('Wrong Response Status (See: <a href="https://github.com/ccloli/E-Hentai-Downloader/issues/16">here</a> )', 'Wrong Status', 'retry');
                 }
                 return;
             }
             if (!res.headers['content-type'] || res.headers['content-type'].split('/')[0].trim() !== 'image') {
                 req.abort();
-                return fail('Wrong Content-Type', 'Wrong MIME', 0);
+                return fail('Wrong Content-Type', 'Wrong MIME', 'retry');
             }
             fail = null;
             var matches = res.rawHeaders.join('\n').match(ehDownloadRegex.resFileName);
@@ -522,7 +508,7 @@ var fetchImg = {
             speedInfo.total = res.headers['content-length'];
             fetchImg.listenAndPipe(res, fs.createWriteStream(path, 'binary'), speedInfo.total ? function(chunk) {
                 speedInfo.loaded += chunk.length;
-                var t = new Date().getTime(),
+                var t = Date.now(),
                     minus = t - speedInfo.lastTimestamp,
                     changes = {
                         progress: speedInfo.loaded / speedInfo.total
@@ -540,8 +526,8 @@ var fetchImg = {
                 fetchImg.onload(res, path, index, status, speedInfo);
             });
             status.set({
-                status: retryCount[index] === 0 ? 'Downloading...' : 'Retrying (' + retryCount[index] + '/' + vm.retryCount + ') ...',
-                class: ''
+                status: retryCount[index] === 0 ? 'Downloading...' : `Retrying (${retryCount[index]}/${vm.retryCount}) ...`,
+                className: ''
             });
         });
         if (0 !== vm.timeout) req.setTimeout(vm.timeout * 1000, function() {
@@ -562,31 +548,40 @@ var fetchImg = {
         }
         return from.pipe(transform).pipe(to);
     },
-    fail(str1, str2, retryType, index, status, res, path) { //retryType 0: retry, 1: stop, 2: stopAll
+    fail(desc, shortDesc, retryType, index, status, res, path) {
         if (!isDownloadingImg) return;
-        console.log('[EHD] #' + (index + 1) + ': ' + str1);
-        res && console.log('[EHD] #' + (index + 1) + ': RealIndex >', imageList[index].realIndex, ' | Status >', res.statusCode, ' | StatusText >', res.statusMessage + '\nResposeHeaders >' + res.headers);
+        console.log(`[EHD] #${index + 1}: ${desc}`);
+        if (res) console.log(`[EHD] #${index + 1}: RealIndex >`, imageList[index].realIndex, ' | Status >', res.statusCode, ' | StatusText >', res.statusMessage + '\nResposeHeaders >' + res.headers);
         status.set({
             progress: 0,
             progressText: '',
-            status: 'Failed! (' + str2 + ')',
-            class: retryType ? 'ehD-pt-failed' : 'ehD-pt-warning'
+            status: `Failed! (${shortDesc})`,
+            className: retryType === 'retry' ? 'ehD-pt-warning' : 'ehD-pt-failed'
         });
-        if (!retryType) return path ? ehD.unlink(path).then(this.retry.bind(this, index, status)).catch(ERRLOG) : this.retry(index, status);
-        else if (2 === retryType) return this.abortAll();
-        fetchCount--;
-        retryCount[index] = 1 / 0;
+        switch (retryType) {
+            case 'retry':
+                if (path) ehD.unlink(path).then(() => this.retry(index, status)).catch(ERRLOG);
+                else this.retry(index, status);
+                break;
+            case 'abort':
+                fetchCount--;
+                retryCount[index] = Infinity;
+                break;
+            case 'abortAll':
+                this.abortAll();
+                break;
+        }
     },
     retry(index, status) {
         var image = imageList[index];
         fetchThread[index].abort();
-        console.error('[EHD] Index >', (index + 1), ' | RealIndex >', image.realIndex, ' | Name >', image.imageName, ' | RetryCount >', retryCount[index], ' | DownloadedCount >', downloadedCount, ' | FetchCount >', fetchCount, ' | FailedCount >', failedCount);
+        console.error('[EHD] Index >', index + 1, ' | RealIndex >', image.realIndex, ' | Name >', image.imageName, ' | RetryCount >', retryCount[index], ' | DownloadedCount >', downloadedCount, ' | FetchCount >', fetchCount, ' | FailedCount >', failedCount);
         if (retryCount[index] < vm.retryCount) { //retry
             retryCount[index]++;
             this.run(index, status);
         } else { //fail
             status.set({
-                class: 'ehD-pt-failed'
+                className: 'ehD-pt-failed'
             });
             failedCount++;
             fetchCount--;
@@ -594,26 +589,27 @@ var fetchImg = {
         }
     },
     addContinueButton() {
-        var continueButton = document.createElement('button');
-        continueButton.innerHTML = 'Continue Downloading';
-        continueButton.addEventListener('click', function() {
-            fetchCount = 0;
-            dialog.removeChild(continueButton);
-            fetchImg.addThreads();
-        });
-        return dialog.appendChild(continueButton);
+        const index = vm.contents.push({
+            text: 'Continue Downloading',
+            onclick() {
+                fetchCount = 0;
+                vm.contents.splice(index, 1);
+                fetchImg.addThreads();
+            }
+        }) - 1;
     },
     addExitButton() {
-        var button = document.createElement('button');
-        button.innerHTML = 'Exit';
-        button.addEventListener('click', ehD.exit);
-        dialog.appendChild(button);
-        button = document.createElement('button');
-        button.innerHTML = 'Back';
-        button.addEventListener('click', function() {
-            ehD.win.reload()
+        vm.contents.push({
+            text: 'Exit',
+            onclick: vm.exit
         });
-        return dialog.appendChild(button);
+        vm.contents.push({
+            text: 'Back',
+            onclick() {
+                ehD.win.removeAllListeners();
+                ehD.win.reload();
+            }
+        });
     },
     addThreads() {
         isDownloadingImg = true;
@@ -626,7 +622,6 @@ var fetchImg = {
                     continue;
                 }
                 imageData[j] = 'Fetching';
-                dialog.scrollTop = dialog.scrollHeight;
                 fetchCount++;
                 fetchImg.run(j);
                 break;
@@ -654,9 +649,15 @@ var fetchImg = {
         fetchCount = 0;
     },
     reachedLimits(isTemp, index, status, res, path) {
-        var str = 'You have ' + (isTemp ? 'temporarily ' : '') + 'reached your image viewing limits.';
-        fail(isTemp ? '509 Bandwidth Exceeded' : 'Exceed Image Viewing Limits', isTemp ? 'Error 509' : 'Exceed Limits', 2, index, status, res, path);
-        if (-1 === globals.apiuid || !confirm(str + ' ' + (isTemp ? 'You can Run the Hentai@Home to support E-Hentai and get more points to increase your limit. Check back in a few hours, and you will be able to download more.' : 'You can reset these limits at home page.') + '\n\nYou can try reseting your image viewing limits to continue by paying your GPs. Reset now?')) {
+        var str = 'You have ' + (isTemp ? 'temporarily ' : '') + 'reached your image viewing limits. ';
+        if (isTemp) {
+            this.fail('509 Bandwidth Exceeded', 'Error 509', 'abortAll', index, status, res, path);
+            str += 'You can run the Hentai@Home to support E-Hentai and get more points to increase your limit. Check back in a few hours, and you will be able to download more.';
+        } else {
+            this.fail('Exceed Image Viewing Limits', 'Exceed Limits', 'abortAll', index, status, res, path);
+            str += 'You can reset these limits at home page.';
+        }
+        if (-1 === globals.apiuid || !confirm(str + '\n\nYou can try reseting your image viewing limits to continue by paying your GPs. Reset now?')) {
             this.suspend();
             pushDialog(str);
         } else {
@@ -668,31 +669,30 @@ var fetchImg = {
     onload(res, path, index, status, speedInfo) {
         if (!isDownloadingImg) return;
 
-        function fail(a, b, c) {
-            return fetchImg.fail(a, b, c, index, status, res, path)
+        function fail(desc, shortDesc, retryType) {
+            return fetchImg.fail(desc, shortDesc, retryType, index, status, res, path)
         };
 
-        function reachedLimits(a) {
-            return fetchImg.reachedLimits(a, index, status, res, path)
+        function reachedLimits(isTemp) {
+            return fetchImg.reachedLimits(isTemp, index, status, res, path)
         };
         switch (speedInfo.loaded) {
             case 0: // Empty
-                return fail('Empty Response (See: <a href="https://github.com/ccloli/E-Hentai-Downloader/issues/16">here</a> )', 'Empty Response');
+                return fail('Empty Response (See: <a href="https://github.com/ccloli/E-Hentai-Downloader/issues/16">here</a> )', 'Empty Response', 'retry');
             case 925: // '403 Access Denied' Image Byte Size
-                return fail('403 Access Denied', 'Error 403', 1);
+                return fail('403 Access Denied', 'Error 403', 'abort');
             case 28: // 'An error has occurred. (403)' Length
-                return fail('An error has occurred. (403)', 'Error 403');
+                return fail('An error has occurred. (403)', 'Error 403', 'retry');
             case 141: // Image Viewing Limits String Byte Size
                 return reachedLimits(false);
             case 28658: // '509 Bandwidth Exceeded' Image Byte Size
                 return reachedLimits(true);
         }
         status.set({
-            fileName: '#' + imageList[index].realIndex + ': ' + imageList[index].imageName,
             progress: 1,
             progressText: '100%',
             status: 'Succeed!',
-            class: 'ehD-pt-succeed'
+            className: 'ehD-pt-succeed'
         });
         imageData[index] = 'Fetched';
         downloadedCount++;
@@ -703,10 +703,10 @@ var fetchImg = {
         else return this.writeInfo(); // all files are downloaded successfully
     },
     onerror(e, index, status) {
-        return this.fail('Network Error', e, 0, index, status);
+        return this.fail('Network Error', e, 'retry', index, status);
     },
     ontimeout(index, status) {
-        return this.fail('Timed Out', 'Timed Out', 0, index, status);
+        return this.fail('Timed Out', 'Timed Out', 'retry', index, status);
     },
     isFinished() {
         if (downloadedCount + failedCount < imageList.length) this.addThreads() // download not finished, some files are not being called to download
@@ -728,200 +728,127 @@ var fetchImg = {
     }
 };
 
-function retryAllFailed() {
-    function startFetchingImg() {
-        dialog.appendChild(progressTable);
-        fetchImg.addThreads();
+function getImgUrl(result) {
+    if (globals.apiuid !== -1 && result.includes('fullimg.php') && !vm.forceResized) {
+        return result.match(ehDownloadRegex.imageURL[0])[1].replaceHTMLEntites()
+    } else if (result.includes('id="img"')) {
+        return result.match(ehDownloadRegex.imageURL[1])[1].replaceHTMLEntites()
+    } else { // Sometimes preview image may not have id="img"
+        return result.match(ehDownloadRegex.imageURL[2])[1].replaceHTMLEntites();
     }
-    var index, refetch = 0;
-    progressTable = document.createElement('table');
-    progressTable.style.width = '100%';
-    for (index = 0; index < imageData.length; index++) {
-        if ('Fetched' !== imageData[index]) {
+}
+
+async function retryAllFailed() {
+    for (let [index, status] of imageData.entries()) {
+        if (status !== 'Fetched') {
             imageData[index] = null;
             retryCount[index] = 0;
         }
     }
+    failedCount = 0;
     if (!vm.neverNewUrl) {
-        var fetchURL, index = 0;
-        ehD.getPage(function() {
-            for (; index < imageData.length; index++) {
-                if (imageData[index] != null) continue;
-                var image = imageList[index];
-                if (!image.imageURL.includes('fullimg.php')) {
-                    image.pageURL = fetchURL = (image.pageURL + ((!vm.neverSendNl && image.nextNL) ? (image.pageURL.includes('?') ? '&' : '?') + 'nl=' + image.nextNL : '')).replaceHTMLEntites();
-                    pushDialog('Fetching Page ' + (index + 1) + ': ' + fetchURL + ' ... ');
-                    refetch = 1;
-                    return fetchURL;
-                } else failedCount--;
+        for (let [index, status] of imageData.entries()) {
+            if (status === 'Fetched') continue;
+            let image = imageList[index];
+            if (image.imageURL.includes('fullimg.php')) continue;
+            let fetchURL = image.pageURL = (image.pageURL + ((!vm.neverSendNl && image.nextNL) ? (image.pageURL.includes('?') ? '&' : '?') + 'nl=' + image.nextNL : '')).replaceHTMLEntites();
+            pushDialog('Fetching Page ' + (index + 1) + ': ' + fetchURL + ' ... ');
+            try {
+                var result = await ehD.getPage(fetchURL);
+            } catch (e) {
+                pushDialog('Failed! Skip and continue...');
+                continue;
             }
-            return fetchURL;
-        }, function(result, send, fail) {
-            var image = imageList[index];
-            if (!image) return;
-            var imageURL = (globals.apiuid !== -1 && result.includes('fullimg.php') && !vm.forceResized) ? result.match(ehDownloadRegex.imageURL[0])[1].replaceHTMLEntites() : result.includes('id="img"') ? result.match(ehDownloadRegex.imageURL[1])[1].replaceHTMLEntites() : result.match(ehDownloadRegex.imageURL[2])[1].replaceHTMLEntites(); // Sometimes preview image may not have id="img"
+            var imageURL = getImgUrl(result);
             image.imageURL = imageURL;
             var nextNL = ehDownloadRegex.nl.test(result) ? result.match(ehDownloadRegex.nl)[1] : null;
             image.nextNL = nextNL;
-            failedCount--;
             pushDialog('Succeed!\nImage ' + (index + 1) + ': ' + imageURL + '\n');
-            if (failedCount === 0) startFetchingImg();
-            else {
-                ++index;
-                send();
-            }
-        }, function(send) {
-            if (retryCount < vm.retryCount) {
-                pushDialog('Failed! Retrying... ');
-                retryCount++;
-                send();
-            } else {
-                pushDialog('Failed! Skip and continue...');
-                refetch = 0;
-                ++index;
-                send();
-                if (!refetch) startFetchingImg();
-            }
-        });
+        }
     }
-    if (!refetch) startFetchingImg();
+    appendProgressTable();
+    fetchImg.addThreads();
 }
 
-function getAllPagesURL() {
-    pagesRange = [];
-    var pagesRangeText = vm.range.replace(/，/g, ',');
+async function getAllPagesURL() {
+    var pagesRangeText = vm.range.replace(/，/g, ',') || `1-`;
     console.log('[EHD] Pages Range >', pagesRangeText);
     if (!ehDownloadRegex.pagesRange.test(pagesRangeText)) {
-        dialog.classList.add('hide');
+        vm.contents = [];
         return alert('Pages Range is not correct.');
     }
-    var pagesRangeScale = pagesRangeText.match(/\d*-\d*|\d+/g);
-    pagesRangeScale.forEach(function(elem) {
-        if (!elem.includes('-')) {
-            var curElem = Number(elem);
-            if (!pagesRange.some(function(e) {
-                    return curElem === e;
-                })) pagesRange.push(curElem);
-        } else {
-            let start = Number(elem.split('-')[0] || 1),
-                end = Number(elem.split('-')[1]) || globals.pageNum;
-            [start, end] = [start, end].sort();
-            for (var i = start; i <= end; i++) {
-                if (!pagesRange.some(function(e) {
-                        return i === e;
-                    })) pagesRange.push(i);
-            }
-        }
-    });
-    pagesRange.sort(function(a, b) {
-        return a > b ? 1 : -1;
-    });
     if (!getAllPagesURLFin) {
         pageURLsList = [];
-        var pagesCount = globals.pageNum;
-        var curPage = 0;
         var prefix = globals.url;
-        ehD.getPage(function() {
-            return prefix + '?p=' + curPage
-        }, function(result, send, fail) {
+        for (var curPage = 0, pagesCount = globals.pageNum; curPage < pagesCount; curPage++) {
+            pushDialog('\nFetching Archive Pages URL (' + (curPage + 1) + '/' + pagesCount + ') ... ');
+            try {
+                var result = await ehD.getPage(`${prefix}?p=${curPage}`);
+            } catch (e) {
+                pushDialog('Failed!\nFetch pages\' URL failed, Please try again later.');
+                return;
+            }
             var pagesURL = result.split('<div id="gdt">')[1].split('<div class="c">')[0].match(ehDownloadRegex.pagesURL);
             for (var i = 0; i < pagesURL.length; i++) {
                 pageURLsList.push(pagesURL[i].split('"')[1].replaceHTMLEntites().replaceOrigin());
             }
             pushDialog('Succeed!');
-            curPage++;
-            if (curPage === pagesCount) {
-                getAllPagesURLFin = true;
-                checkWrongPages();
-                pushDialog('\n\n');
-                ehDownload();
-            } else {
-                send();
-                pushDialog('\nFetching Archive Pages URL (' + (curPage + 1) + '/' + pagesCount + ') ... ');
-            }
-        });
-        pushDialog('\nFetching Archive Pages URL (' + (curPage + 1) + '/' + pagesCount + ') ... ');
-    } else {
-        checkWrongPages();
-        ehDownload();
-    }
-
-    function checkWrongPages() {
-        var wrongPages = pagesRange.filter(function(elem) {
-            return elem > pageURLsList.length;
-        });
-        if (wrongPages.length !== 0) {
-            pagesRange = pagesRange.filter(function(elem) {
-                return elem <= pageURLsList.length;
-            });
-            pushDialog('Page ' + wrongPages.join(', ') + (wrongPages.length > 1 ? ' are' : ' is') + ' not exist, and will be ignored.');
-        }
-    }
-}
-
-function ehDownload() {
-    imageList = [];
-    imageData = [];
-    fetchThread = [];
-    fetchImg.abortAll();
-    var index = 1;
-    downloadedCount = fetchCount = failedCount = 0;
-    logStr = globals.title + '\n' + (globals.title === globals.subtitle) ? '' : (globals.subtitle + '\n') + globals.url.replaceHTMLEntites() + '\n\n' + 'Category: ' + globals.tag + '\n' + 'Uploader: ' + globals.uploader + '\n';
-    logStr += globals.description.join('\n') + '\n'
-    logStr += 'Rating: ' + globals.average_rating + '\n';
-    logStr += 'Tags:\n' + globals.tags.join('\n') + '\n'
-    if (globals.uploaderComment) logStr += 'Uploader Comment:\n' + globals.uploaderComment + '\n';
-    logStr += '\n'
-    progressTable = document.createElement('table');
-    progressTable.style.width = '100%';
-    pushDialog(logStr);
-    var fetchURL;
-    if (getAllPagesURLFin) {
-        var rangeIndex = 0;
-        if (pagesRange.length === 0) fetchURL = pageURLsList[rangeIndex];
-        else fetchURL = pageURLsList[pagesRange[rangeIndex] - 1];
-    } else {
-        pageURLsList = [];
-        fetchURL = globals.firstUrl;
-    }
-    ehD.getPage(function() {
-        return fetchURL;
-    }, function(result, send, fail) {
-        var realIndex = (pagesRange.length !== 0 ? pagesRange[Math.min(rangeIndex, pagesRange.length - 1)] : index);
-        if (getAllPagesURLFin) {
-            rangeIndex++;
-            if (pagesRange.length === 0) var nextFetchURL = pageURLsList[Math.min(rangeIndex, pageURLsList.length - 1)];
-            else var nextFetchURL = pageURLsList[pagesRange[Math.min(rangeIndex, pagesRange.length - 1)] - 1];
-        } else {
-            pageURLsList.push(fetchURL);
-            var nextFetchURL = result.includes('<a id="next"') ? result.match(ehDownloadRegex.nextFetchURL[0])[1].replaceHTMLEntites().replaceOrigin() : result.match(ehDownloadRegex.nextFetchURL[1])[1].replaceHTMLEntites().replaceOrigin();
-        }
-        var imageURL = (globals.apiuid !== -1 && result.includes('fullimg.php') && !vm.forceResized) ? result.match(ehDownloadRegex.imageURL[0])[1].replaceHTMLEntites().replaceOrigin() : result.includes('id="img"') ? result.match(ehDownloadRegex.imageURL[1])[1].replaceHTMLEntites() : result.match(ehDownloadRegex.imageURL[2])[1].replaceHTMLEntites(); // Sometimes preview image may not have id="img"
-        var fileName = result.match(ehDownloadRegex.fileName)[1].replaceHTMLEntites();
-        var nextNL = ehDownloadRegex.nl.test(result) ? result.match(ehDownloadRegex.nl)[1] : null;
-        imageList.push(new PageData(fetchURL, imageURL, fileName, nextNL, realIndex));
-        index++;
-        pushDialog('Succeed!\nImage ' + realIndex + ': ' + imageURL + '\n');
-        if (nextFetchURL !== fetchURL) {
-            fetchURL = nextFetchURL;
-            pushDialog('Fetching Page ' + (pagesRange.length !== 0 ? pagesRange[Math.min(rangeIndex, pagesRange.length - 1)] : index) + ': ' + fetchURL + ' ... ');
-            return send();
         }
         getAllPagesURLFin = true;
-        if (vm.numberImages) {
-            // Number images, thanks to JingJang@GitHub, source: https://github.com/JingJang/E-Hentai-Downloader
-            if (pagesRange.length === 0 || !isResume && !vm.numberRealIndex) {
-                let len = Math.ceil(Math.log10(imageList.length));
-                for (let [index, elem] of imageList.entries()) elem.imageNumber = String(index + 1).padStart(len, '0');
-            } else {
-                let len = Math.ceil(Math.log10(pageURLsList.length));
-                for (let elem of imageList) elem.imageNumber = String(elem.realIndex).padStart(len, '0');
-            }
+        pushDialog('\n\n');
+    }
+    var pagesRangeScale = pagesRangeText.match(/\d*-\d*|\d+/g);
+    var numSet = new Set();
+    for (let elem of pagesRangeScale) {
+        if (!elem.includes('-')) {
+            numSet.add(Number(elem));
+        } else {
+            let [start, end] = elem.split('-').map(Number);
+            start = start || 1,
+                end = end || pageURLsList.length;
+            [start, end] = [start, end].sort((a, b) => a - b);
+            for (let num = start; num <= end; num++) numSet.add(num);
         }
-        pushDialog('\n');
-        dialog.appendChild(progressTable);
-        retryCount = [];
-        fetchImg.addThreads();
-    });
-    pushDialog('Start downloading at ' + new Date() + '\nStart fetching images\' URL...\nFetching Page 1: ' + fetchURL + ' ... ');
+    };
+    pagesRange = [...numSet].sort((a, b) => a - b);
+    // nums in range may greater than pageNum
+    var wrongIndex = pagesRange.findIndex(n => n > pageURLsList.length);
+    if (wrongIndex !== -1) {
+        pagesRange = pagesRange.slice(0, wrongIndex);
+        var wrongPages = pagesRange.slice(wrongIndex);
+        pushDialog('Page ' + wrongPages.join(', ') + (wrongPages.length > 1 ? ' are' : ' is') + ' not exist, and will be ignored.');
+    }
+    getImageInfo();
+}
+
+async function getImageInfo() {
+    pushDialog('Start fetching images\' URL...\n')
+    const len = Math.ceil(Math.log10(pagesRange.length));
+    for (let [index, realIndex] of pagesRange.entries()) {
+        const pageURL = pageURLsList[realIndex - 1];
+        pushDialog('Fetching Page ' + realIndex + ': ' + pageURL + ' ... ');
+        try {
+            var result = await ehD.getPage(pageURL);
+        } catch (e) {
+            pushDialog('Failed!\nFetch images\' URL failed, Please try again later.');
+            return;
+        }
+        const imageURL = getImgUrl(result);
+        const imageName = getPurifiedName(result.match(ehDownloadRegex.fileName)[1].replaceHTMLEntites());
+        const nextNL = ehDownloadRegex.nl.test(result) ? result.match(ehDownloadRegex.nl)[1] : null;
+        const imageNumber = vm.numberImages ? String(vm.numberRealIndex ? realIndex : index + 1).padStart(len, '0') : '';
+        imageList.push({
+            pageURL,
+            imageURL,
+            imageName,
+            nextNL,
+            realIndex,
+            imageNumber
+        });
+        pushDialog('Succeed!\nImage ' + realIndex + ': ' + imageURL + '\n');
+    }
+    pushDialog('\n');
+    appendProgressTable();
+    retryCount = [];
+    fetchImg.addThreads();
 }

@@ -78,6 +78,9 @@ body {
 #ehD-setting input, #ehD-box input {
 	vertical-align: middle;
 }
+.ehD-pt-table {
+	width: 100%;
+}
 .ehD-pt-name {
 	word-break: break-all;
 }
@@ -112,6 +115,7 @@ body {
 	font-weight: bold;
 	text-decoration: none;
 }
-.hide {
-	display: none;
+.ehD-content {
+	white-space: pre-wrap;
+	word-wrap: break-word;
 }

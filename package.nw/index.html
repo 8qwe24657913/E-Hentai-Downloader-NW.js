@@ -6,7 +6,7 @@
         <title>E-Hentai Downloader</title>
         <link rel="stylesheet" type="text/css" href="main.css">
         <script src="hacks.js"></script>
-        <script src="https://unpkg.com/vue"></script>
+        <script src="vue.js"></script>
     </head>
 
     <body>
@@ -32,13 +32,13 @@
                     <label for="ehD-proxy">Assign Proxy</label>
                 </div>
                 <div class="flex" v-if="proxy">
-                    <label for="ehD-proxy-uri">Proxy URI(See: <a href="https://github.com/TooTallNate/node-proxy-agent">proxy-agent</a>): </label>
+                    <label for="ehD-proxy-uri">Proxy URI: </label>
                     <input type="text" id="ehD-proxy-uri" v-model.lazy.trim="proxyUri" class="wide">
                 </div>
             </fieldset>
             <div id="ehD-setting">
                 <div class="g2">
-                    <label>Cookie:
+                    <label class="flex">Cookie:
                     <input type="text" v-model.lazy.trim="cookie" placeholder="ipb_member_id=xxx; ipb_pass_hash=xxx; igneous=xxx" class="wide"></label>
                 </div>
                 <div class="g2">
@@ -94,8 +94,24 @@
                     <button id="exit" v-on:click="exit">Exit</button>
                 </div>
             </div>
+            <div id="ehD-dialog" v-if="contents.length">
+                <template v-for="content of contents">
+                    <span v-if="typeof content === 'string'" class="ehD-content">{{content}}</span>
+                    <table v-else-if="Array.isArray(content)" class="ehD-pt-table" v-for="item of content">
+                        <tr v-bind:class="['ehD-pt-item', item.className]">
+                            <td class="ehD-pt-name">#{{item.realIndex}}: {{item.imageName}}</td>
+                            <td class="ehD-pt-progress-outer">
+                                <progress class="ehD-pt-progress" v-if="item.progress !== -1" v-bind:value="item.progress"></progress>
+                                <progress class="ehD-pt-progress" v-else></progress>
+                                <span class="ehD-pt-progress-text">{{item.progressText}}</span>
+                            </td>
+                            <td class="ehD-pt-status">{{item.status}}</td>
+                        </tr>
+                    </table>
+                    <button v-else v-on:click="content.onclick()">{{content.text}}</button>
+                </template>
+            </div>
         </div>
-        <div id="ehD-dialog" class="hide"></div>
         <script src="main.js"></script>
     </body>
 
