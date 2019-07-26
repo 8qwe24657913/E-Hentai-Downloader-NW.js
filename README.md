@@ -3,7 +3,7 @@
 Directly Download E-Hentai archive as folder with less memory usage than [The userscript version](https://github.com/ccloli/E-Hentai-Downloader)
 
 ![kokomade](https://raw.githubusercontent.com/8qwe24657913/E-Hentai-Downloader-NW.js/v0.13%2B/kokomade.jpg)
-Thank you for your company, E-Hentai
+Thank you for your company, E-Hentai. [Original Post](https://forums.e-hentai.org/index.php?showtopic=229503)
 
 ## This branch requires nw.js v0.13+. If you are an old user, please [update nw.js](http://nwjs.io/downloads/)
 
